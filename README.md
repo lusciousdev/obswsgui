@@ -4,7 +4,7 @@ GUI for interacting with OBS through a WebSocket server.
 
 ## Downloads
 
-Coming soon.
+Check the [GitHub releases](https://github.com/lusciousdev/obswsgui/releases).
 
 ## Using obswsgui
 
