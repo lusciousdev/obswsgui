@@ -310,7 +310,7 @@ class OBS_WS_GUI:
     selected_item = self.get_selected_item()
     
     if selected_item:
-      self.dup_image_name_label = ttk.Label(self.dup_image_frame, text = f"Duplicate \"{selected_item.label}\"?")
+      self.dup_image_name_label = ttk.Label(self.dup_image_frame, text = f"Duplicate \"{selected_item.source_name}\"?")
       self.dup_image_name_label.grid(column = 0, columnspan = 2, row = 0, sticky = (W, E))
       
       def dup():
@@ -349,7 +349,7 @@ class OBS_WS_GUI:
     selected_item = self.get_selected_item()
     
     if selected_item:
-      self.del_image_prompt = ttk.Label(self.del_image_frame, text = f"Are you sure you want to delete \"{selected_item.label}\"?")
+      self.del_image_prompt = ttk.Label(self.del_image_frame, text = f"Are you sure you want to delete \"{selected_item.source_name}\"?")
       self.del_image_prompt.grid(column = 0, columnspan = 2, row = 0, sticky = (W, E))
       
       def delimg():
@@ -470,6 +470,16 @@ class OBS_WS_GUI:
         return item
     return None
   
+  async def get_image_for_item(self, item):
+    req = simpleobsws.Request('GetInputSettings', { 'inputName': item.source_name })
+    ret = await self.ws.call(req)
+    
+    if not ret.ok():
+      self.log_request_error(ret)
+    elif 'file' in ret.responseData['inputSettings']:
+      url = ret.responseData['inputSettings']['file']
+      item.set_image(url)
+  
   async def get_scene_state(self):
     req = simpleobsws.Request('GetCurrentProgramScene')
     ret = await self.ws.call(req)
@@ -526,20 +536,20 @@ class OBS_WS_GUI:
         item.y = y
         item.width = w
         item.height = h
-        item.label = i['sourceName']
+        item.source_width = sw
+        item.source_height = sh
+        item.bounds_type = tf['boundsType']
+        item.source_name = i['sourceName']
         item.scene_item_index = i['sceneItemIndex']
+        
+        if i['inputKind'] == 'image_source' and item.img_url == "":
+          await self.get_image_for_item(item)
+        
       else:
         item = OBS_Object(i['sceneItemId'], i['sceneItemIndex'], self.canvas, self.screen, x, y, w, h, sw, sh, tf['boundsType'], i['sourceName'])
         
         if i['inputKind'] == 'image_source':
-          req = simpleobsws.Request('GetInputSettings', { 'inputName': i['sourceName'] })
-          ret = await self.ws.call(req)
-          
-          if not ret.ok():
-            self.log_request_error(ret)
-          else:
-            url = ret.responseData['inputSettings']['file']
-            item.set_image(url)
+          await self.get_image_for_item(item)
         else:
           item.interactable = False
           

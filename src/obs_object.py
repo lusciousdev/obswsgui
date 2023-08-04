@@ -49,6 +49,7 @@ class OBS_Object:
   last_wpx = 0
   last_hpx = 0
   
+  source_name = ""
   scene_item_id = 0
   scene_item_index = 0
   bounds_type = ""
@@ -72,8 +73,6 @@ class OBS_Object:
   transformed_img = None
   tk_img = None
   
-  label = ""
-  
   line_width = 5
   selected = False
   was_selected = False
@@ -94,7 +93,7 @@ class OBS_Object:
     self.source_width = source_width
     self.source_height = source_height
     self.bounds_type = bounds_type
-    self.label = label
+    self.source_name = label
     self.interactable = interactable
     
   def __del__(self):
@@ -214,10 +213,10 @@ class OBS_Object:
         self.br_grab_id = None
       
       if not self.text_id:
-        self.text_id = self.canvas.create_text(self.xpx + lw + 1, self.ypx + lw + 1, anchor = NW, text = self.label)
+        self.text_id = self.canvas.create_text(self.xpx + lw + 1, self.ypx + lw + 1, anchor = NW, text = self.source_name)
       else:
         self.canvas.coords(self.text_id, self.xpx + lw + 1, self.ypx + lw + 1)
-        self.canvas.itemconfigure(self.text_id, anchor = NW, text = self.label)
+        self.canvas.itemconfigure(self.text_id, anchor = NW, text = self.source_name)
       
       self.last_xpx = self.xpx
       self.last_ypx = self.ypx
