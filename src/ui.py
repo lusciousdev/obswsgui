@@ -243,7 +243,6 @@ class OBS_WS_GUI:
           if self.manip_mode == BOTTOM or self.manip_mode == BOTTOMLEFT or self.manip_mode == BOTTOMRIGHT:
             h += diffY
           item.set_transform(x, y, w, h)
-        self.queue_set_item_transform(item)
         
     self.update_lastpos(event.x, event.y)
     
@@ -376,8 +375,9 @@ class OBS_WS_GUI:
     
     while True:
       self.set_modification_ui()
+      self.queue_item_transform_requests()
       loop.run_until_complete(self.async_update())
-      time.sleep(1.0 / 25.0)
+      time.sleep(1.0 / 10.0)
     
   async def async_update(self):
     if not self.connected and self.ready_to_connect:
@@ -528,6 +528,12 @@ class OBS_WS_GUI:
     
     for i in range(1, len(self.scene_items)):
       self.scene_items[i - 1].move_to_front(self.scene_items[i])
+      
+  def queue_item_transform_requests(self):
+    for item in self.scene_items:
+      if item.changed:
+        self.queue_set_item_transform(item)
+        item.changed = False
     
   async def send_requests(self):
     for req in self.requests_queue:

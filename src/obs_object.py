@@ -88,6 +88,8 @@ class OBS_Object:
   default_color  = "#efeff1"
   selected_color = "#fab4ff"
   
+  changed = False
+  
   def __init__(self, scene_item_id : int, scene_item_index : int, canvas : Canvas, screen, x : float, y : float, width : float, height : float, source_width : float, source_height : float, bounds_type : str, label : str = "", interactable : bool = True):
     self.scene_item_id = scene_item_id
     self.scene_item_index = scene_item_index
@@ -156,6 +158,7 @@ class OBS_Object:
       self.width = w
       self.height = h
       
+      self.changed = True
       self.redraw()
       
   def set_selected(self, selected):
