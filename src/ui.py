@@ -5,7 +5,7 @@ import asyncio
 import time
 
 from tkinter import *
-from tkinter import ttk
+from tkinter import ttk, font
 
 import simpleobsws
 
@@ -30,11 +30,27 @@ class OBS_WS_GUI:
   
   manip_mode = None
   
+  modifyframe = None
+  
+  defaultfontopt = { 'font': ("Helvetica",  9) }
+  largefontopt   = { 'font': ("Helvetica", 16) }
+  hugefontopt    = { 'font': ("Helvetica", 24) }
+  
+  background_color  = "#0e0e10"
+  background_medium = "#18181b"
+  background_light  = "#1f1f23"
+  background_button = "#2e2e35"
+  text_color        = "#efeff1"
+  accent_color      = "#fab4ff"
+  
+  style = None
+  
   def __init__(self, root : Tk):
     self.root = root
     
     self.root.title("OBS WebSocket GUI")
-    self.root.geometry("480x320")
+    self.root.geometry("720x400")
+    self.root.configure(background = self.background_color)
     
     self.root.columnconfigure(0, weight = 1)
     self.root.rowconfigure(0, weight = 1)
@@ -47,7 +63,43 @@ class OBS_WS_GUI:
     self.new_image_name_strvar = StringVar(self.root, "")
     self.new_image_url_strvar = StringVar(self.root, "")
     
-    self.dup_image_name_strvar = StringVar(self.root, "")
+    self.style = ttk.Style(self.root)
+    self.style.theme_create("obswsgui", parent = "alt", settings = {
+      ".": {
+        "configure": {
+          "background": self.background_color,
+          "foreground": self.text_color
+        }
+      },
+      "TButton": {
+        "configure": {
+          "anchor": "center",
+          "background": self.background_light,
+        },
+        "map": {
+          "background": [('active', self.background_button)]
+        }
+      },
+      "TEntry": {
+        "configure": {
+          "background": self.text_color,
+          "foreground": self.background_color
+        }
+      },
+      "Large.TLabel": {
+        "configure": self.largefontopt
+      },
+      "Large.TButton": {
+        "configure": self.largefontopt
+      },
+      "Huge.TLabel": {
+        "configure": self.hugefontopt
+      },
+      "Huge.TButton": {
+        "configure": self.hugefontopt
+      }
+    })
+    self.style.theme_use("obswsgui")
     
     self.setup_connection_ui()
     
@@ -56,37 +108,32 @@ class OBS_WS_GUI:
       ele.destroy()
     
   def setup_connection_ui(self):
-    options = { 'font': (None, 16) }
-    
-    s = ttk.Style()
-    s.configure("Conn.TButton", font = options['font'])
-    
     self.connframe = ttk.Frame(self.root, padding = "12 12 12 12")
     self.connframe.place(relx = 0.5, rely = 0.5, anchor = CENTER)
     
     self.ip_addr_frame = ttk.Frame(self.connframe, padding = "2 2 2 2")
     self.ip_addr_frame.grid(column = 0, row = 0, sticky = (N, W, E))
     
-    self.ip_addr_label = ttk.Label(self.ip_addr_frame, text = "IP Address/URL", **options)
+    self.ip_addr_label = ttk.Label(self.ip_addr_frame, text = "IP Address/URL", style="Large.TLabel")
     self.ip_addr_label.grid(column = 0, row = 0, sticky = W)
-    self.port_label = ttk.Label(self.ip_addr_frame, text = "Port", **options)
+    self.port_label = ttk.Label(self.ip_addr_frame, text = "Port", style="Large.TLabel")
     self.port_label.grid(column = 1, row = 0, sticky = W)
     
-    self.ip_addr_entry = ttk.Entry(self.ip_addr_frame, textvariable = self.ip_addr_strvar, width = 25, **options)
+    self.ip_addr_entry = ttk.Entry(self.ip_addr_frame, textvariable = self.ip_addr_strvar, width = 25, **self.largefontopt)
     self.ip_addr_entry.grid(column = 0, row = 1, sticky = (W, E))
-    self.port_entry = ttk.Entry(self.ip_addr_frame, textvariable = self.port_strvar, width = 8, **options)
+    self.port_entry = ttk.Entry(self.ip_addr_frame, textvariable = self.port_strvar, width = 8, **self.largefontopt)
     self.port_entry.grid(column = 1, row = 1, sticky = (W, E))
     
     self.pw_frame = ttk.Frame(self.connframe, padding = "2 2 2 2")
     self.pw_frame.grid(column = 0, row = 1, sticky = (S, W, E))
     self.pw_frame.grid_columnconfigure(1, weight = 1)
     
-    self.pw_label = ttk.Label(self.pw_frame, text = "Password: ", **options)
+    self.pw_label = ttk.Label(self.pw_frame, text = "Password: ", style="Large.TLabel")
     self.pw_label.grid(column = 0, row = 0)
-    self.pw_entry = ttk.Entry(self.pw_frame, textvariable = self.pw_strvar, **options)
+    self.pw_entry = ttk.Entry(self.pw_frame, textvariable = self.pw_strvar, **self.largefontopt)
     self.pw_entry.grid(column = 1, row = 0, sticky = (W, E))
     
-    self.conn_submit = ttk.Button(self.connframe, textvariable = self.conn_submit_strvar, style="Conn.TButton", command = self.start_connection_attempt)
+    self.conn_submit = ttk.Button(self.connframe, textvariable = self.conn_submit_strvar, command = self.start_connection_attempt, style="Large.TButton")
     self.conn_submit.grid(column = 0, row = 2, sticky = (W, E))
     
   def canvas_to_scene(self, coords : Coords):
@@ -133,6 +180,7 @@ class OBS_WS_GUI:
     if not already_focused and len(items_under) > 0:
       self.manip_mode = items_under[0][1]
       items_under[0][0].selected = True
+      items_under[0][0].setup_modify_ui(self)
           
   def doubleClick(self, event):
     self.update_lastpos(event.x, event.y)
@@ -158,14 +206,17 @@ class OBS_WS_GUI:
           items_under[i][0].selected = False
           items_under[i + 1][0].selected = True
           self.manip_mode = items_under[i+1][1]
+          items_under[i + 1][0].setup_modify_ui(self)
         if i > 0 and i == len(items_under) - 1:
           items_under[i][0].selected = False
           items_under[0][0].selected = True
           self.manip_mode = items_under[0][1]
+          items_under[0][0].setup_modify_ui(self)
         break
     if not already_focused and len(items_under) > 0:
       self.manip_mode = items_under[0][1]
       items_under[0][0].selected = True
+      items_under[0][0].setup_modify_ui(self)
 
   def mouseMove(self, event):
     diffX = round((event.x - self.lastpos.x) / self.screen.scale)
@@ -223,13 +274,17 @@ class OBS_WS_GUI:
     self.requests_queue.append(tf_req)
     
   def setup_default_ui(self):
-    self.defaultframe = ttk.Frame(self.root, padding = "12 12 12 12")
+    self.defaultframe = ttk.Frame(self.root, padding = "5 5 5 5")
     self.defaultframe.pack(anchor = CENTER, fill = BOTH, expand = True)
-    self.defaultframe.columnconfigure(0, weight = 1)
+    self.defaultframe.columnconfigure(0, minsize=150)
+    self.defaultframe.columnconfigure(1, weight = 1)
     self.defaultframe.rowconfigure(0, weight=1)
     
-    self.canvas = Canvas(self.defaultframe, width = 480, height = 270, background = "white")
-    self.canvas.grid(column = 0, row = 0, sticky = (N, W, E, S))
+    self.modifyframe = ttk.Frame(self.defaultframe, padding="0 0 5 5")
+    self.modifyframe.grid(column = 0, row = 0, sticky = (N, W, E, S))
+    
+    self.canvas = Canvas(self.defaultframe, background = self.background_light, bd = 0, highlightthickness = 0, relief = 'ridge')
+    self.canvas.grid(column = 1, row = 0, sticky = (N, W, E, S), padx = (5, 0), pady = (0, 5))
         
     self.canvas.bind("<Configure>", self.draw)
     self.canvas.bind("<Button-1>", self.mouseDown)
@@ -237,20 +292,8 @@ class OBS_WS_GUI:
     self.canvas.bind("<ButtonRelease-1>", self.mouseUp)
     self.canvas.bind("<B1-Motion>", self.mouseMove)
     
-    self.uiframe = ttk.Frame(self.defaultframe, padding = "12 12 12 12")
-    self.uiframe.grid(column = 0, row = 1, sticky = (S, W, E))
-    
-    self.addimage = ttk.Button(self.uiframe, text = "Add", command = self.setup_add_image_dialog)
-    self.addimage.grid(column = 0, row = 0, sticky = W)
-    
-    self.dupimage = ttk.Button(self.uiframe, text = "Duplicate", command = self.setup_duplicate_image_dialog)
-    self.dupimage.grid(column = 1, row = 0, sticky = W)
-    
-    self.deleteimage = ttk.Button(self.uiframe, text = "Delete", command = self.setup_delete_image_dialog)
-    self.deleteimage.grid(column = 2, row = 0, sticky = W)
-    
-    self.deleteimage = ttk.Button(self.uiframe, text = "Move to front", command = self.move_selected_to_front)
-    self.deleteimage.grid(column = 3, row = 0, sticky = W)
+    self.addimage = ttk.Button(self.defaultframe, text = "+", command = self.setup_add_image_dialog, width = 14, style = "Large.TButton")
+    self.addimage.grid(column = 1, row = 1, sticky = W, padx = (5, 0))
     
     self.screen = ScreenObj(self.canvas, anchor = CENTER, width = self.video_width, height = self.video_height, label = "Screen")
     
@@ -262,109 +305,37 @@ class OBS_WS_GUI:
     
     self.add_image_dialog.protocol("WM_DELETE_WINDOW", self.close_add_image_dialog)
     
-    self.add_image_frame = ttk.Frame(self.add_image_dialog, padding = "12 12 12 12")
+    self.add_image_frame = ttk.Frame(self.add_image_dialog, padding = "5 5 5 5")
     self.add_image_frame.grid(column = 0, row = 0, sticky = (N, W, E, S))
     self.add_image_frame.grid_columnconfigure(0, weight = 1)
     
-    self.new_image_name_label = ttk.Label(self.add_image_frame, text = "Image name")
+    self.new_image_name_label = ttk.Label(self.add_image_frame, text = "Image name", style = "Large.TLabel")
     self.new_image_name_label.grid(column = 0, row = 0, sticky = W)
-    self.new_image_name_entry = ttk.Entry(self.add_image_frame, textvariable = self.new_image_name_strvar, width = 48)
-    self.new_image_name_entry.grid(column = 0, row = 1, sticky = W)
+    self.new_image_name_entry = ttk.Entry(self.add_image_frame, textvariable = self.new_image_name_strvar, width = 48, **self.largefontopt)
+    self.new_image_name_entry.grid(column = 0, row = 1, sticky = W, pady = (0, 10))
     
-    self.new_image_url_label = ttk.Label(self.add_image_frame, text = "Image URL (must be online)")
+    self.new_image_url_label = ttk.Label(self.add_image_frame, text = "Image URL (must be online)", style = "Large.TLabel")
     self.new_image_url_label.grid(column = 0, row = 2, sticky = W)
-    self.new_image_url_entry = ttk.Entry(self.add_image_frame, textvariable = self.new_image_url_strvar, width = 48)
-    self.new_image_url_entry.grid(column = 0, row = 3, sticky = W)
+    self.new_image_url_entry = ttk.Entry(self.add_image_frame, textvariable = self.new_image_url_strvar, width = 48, **self.largefontopt)
+    self.new_image_url_entry.grid(column = 0, row = 3, sticky = W, pady = (0, 10))
     
     self.add_image_button_frame = ttk.Frame(self.add_image_frame)
     self.add_image_button_frame.grid(column = 0, row = 5, sticky=E)
-    
     
     def addimg():
       self.queue_add_image_req()
       self.close_add_image_dialog()
     
-    self.new_image_submit = ttk.Button(self.add_image_button_frame, text = "Add image", command = addimg)
-    self.new_image_submit.grid(column = 0, row = 0, sticky = E)
+    self.new_image_submit = ttk.Button(self.add_image_button_frame, text = "Add image", command = addimg, padding = "5 0 0 0", style = "Large.TButton")
+    self.new_image_submit.grid(column = 0, row = 0, sticky = E, padx = (5, 5))
   
-    self.new_image_cancel = ttk.Button(self.add_image_button_frame, text = "Cancel", command = self.close_add_image_dialog)
-    self.new_image_cancel.grid(column = 1, row = 0, sticky = E)
+    self.new_image_cancel = ttk.Button(self.add_image_button_frame, text = "Cancel", command = self.close_add_image_dialog, style="Large.TButton")
+    self.new_image_cancel.grid(column = 1, row = 0, sticky = E, padx = (5, 5))
     
   def close_add_image_dialog(self):
     self.new_image_name_strvar.set("")
     self.new_image_url_strvar.set("")
     self.add_image_dialog.destroy()
-    
-  def setup_duplicate_image_dialog(self):
-    self.dup_image_dialog = Toplevel(self.root)
-    x = self.root.winfo_x()
-    y = self.root.winfo_y()
-    self.dup_image_dialog.geometry(f"+{x + 200}+{y + 200}")
-    
-    self.dup_image_dialog.protocol("WM_DELETE_WINDOW", self.close_dup_image_dialog)
-    
-    self.dup_image_frame = ttk.Frame(self.dup_image_dialog, padding = "12 12 12 12")
-    self.dup_image_frame.grid(column = 0, row = 0, sticky = (N, W, E, S))
-    self.dup_image_frame.grid_columnconfigure(0, weight = 1)
-    
-    selected_item = self.get_selected_item()
-    
-    if selected_item:
-      self.dup_image_name_label = ttk.Label(self.dup_image_frame, text = f"Duplicate \"{selected_item.source_name}\"?")
-      self.dup_image_name_label.grid(column = 0, columnspan = 2, row = 0, sticky = (W, E))
-      
-      def dup():
-        self.queue_duplicate_image_req()
-        self.close_dup_image_dialog()
-        
-      self.dup_image_submit = ttk.Button(self.dup_image_frame, text = "Yes", command = dup)
-      self.dup_image_submit.grid(column = 0, row = 1, sticky = (W, E))
-    
-      self.dup_image_cancel = ttk.Button(self.dup_image_frame, text = "No", command = self.close_dup_image_dialog)
-      self.dup_image_cancel.grid(column = 1, row = 1, sticky = (W, E))
-    else:
-      self.dup_image_name_label = ttk.Label(self.dup_image_frame, text = f"No item selected.")
-      self.dup_image_name_label.grid(column = 0, row = 0, sticky = (W, E))
-    
-      self.dup_image_cancel = ttk.Button(self.dup_image_frame, text = "Cancel", command = self.close_dup_image_dialog)
-      self.dup_image_cancel.grid(column = 0, row = 1, sticky = (W, E))
-      
-    
-  def close_dup_image_dialog(self):
-    self.dup_image_name_strvar.set("")
-    self.dup_image_dialog.destroy()
-    
-  def setup_delete_image_dialog(self):
-    self.del_image_dialog = Toplevel(self.root)
-    x = self.root.winfo_x()
-    y = self.root.winfo_y()
-    self.del_image_dialog.geometry(f"+{x + 200}+{y + 200}")
-    
-    self.del_image_dialog.protocol("WM_DELETE_WINDOW", self.del_image_dialog.destroy)
-    
-    self.del_image_frame = ttk.Frame(self.del_image_dialog, padding = "12 12 12 12")
-    self.del_image_frame.grid(column = 0, row = 0, sticky = (N, W, E, S))
-    self.del_image_frame.grid_columnconfigure(0, weight = 1)
-    
-    selected_item = self.get_selected_item()
-    
-    if selected_item:
-      self.del_image_prompt = ttk.Label(self.del_image_frame, text = f"Are you sure you want to delete \"{selected_item.source_name}\"?")
-      self.del_image_prompt.grid(column = 0, columnspan = 2, row = 0, sticky = (W, E))
-      
-      def delimg():
-        self.queue_delete_image_req()
-        self.del_image_dialog.destroy()
-      
-      self.del_image_submit = ttk.Button(self.del_image_frame, text = "Yes", command = delimg)
-      self.del_image_submit.grid(column = 0, row = 1, sticky = E)
-      self.del_image_cancel = ttk.Button(self.del_image_frame, text = "No", command = self.del_image_dialog.destroy)
-      self.del_image_cancel.grid(column = 1, row = 1, sticky = E)
-    else:
-      self.del_image_prompt = ttk.Label(self.del_image_frame, text = f"No item selected.")
-      self.del_image_prompt.grid(column = 0, row = 0, sticky = (W, E))
-      self.del_image_cancel = ttk.Button(self.del_image_frame, text = "Cancel", command = self.del_image_dialog.destroy)
-      self.del_image_cancel.grid(column = 0, row = 1, sticky = (W, E))
     
   def queue_add_image_req(self):
     img_name = self.new_image_name_strvar.get()
@@ -373,27 +344,6 @@ class OBS_WS_GUI:
     if img_name != "" and img_url != "":
       img_req  = simpleobsws.Request('CreateInput', { 'sceneName': self.current_scene, 'inputName': img_name, 'inputKind': 'image_source', 'inputSettings': { 'file': img_url }, 'sceneItemEnabled': True })
       self.requests_queue.append(img_req)
-    
-  def queue_duplicate_image_req(self):
-    selected_item = self.get_selected_item()
-    img_req = simpleobsws.Request('DuplicateSceneItem', { 'sceneName': self.current_scene, 'sceneItemId': selected_item.scene_item_id})
-    self.requests_queue.append(img_req)
-    
-  def queue_delete_image_req(self):
-    selected_item = None
-    for item in self.scene_items:
-      if item.selected:
-        selected_item = item
-        
-    del_req = simpleobsws.Request('RemoveSceneItem', { 'sceneName': self.current_scene, 'sceneItemId': selected_item.scene_item_id })
-    self.requests_queue.append(del_req)
-    
-  def move_selected_to_front(self):
-    selected_item = self.get_selected_item()
-    if selected_item:
-      selected_item.move_to_front()
-      index_req = simpleobsws.Request('SetSceneItemIndex', { 'sceneName': self.current_scene, 'sceneItemId': selected_item.scene_item_id, 'sceneItemIndex': self.scene_items[0].scene_item_index})
-      self.requests_queue.append(index_req)
   
   def set_conn_ui_state(self, disabled : bool, submit_str : str):
     self.conn_submit_strvar.set(submit_str)
@@ -407,11 +357,19 @@ class OBS_WS_GUI:
     self.set_conn_ui_state(True, "Attempting connection...")
     self.ready_to_connect = True
     
+  def set_modification_ui(self):
+    selected_item = self.get_selected_item()
+    if self.modifyframe and not selected_item:
+      if self.modifyframe:
+        for item in self.modifyframe.winfo_children():
+          item.destroy()
+    
   def start_async_loop(self):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
     while True:
+      self.set_modification_ui()
       self.draw()
       loop.run_until_complete(self.async_update())
       time.sleep(1.0 / 25.0)
@@ -455,12 +413,20 @@ class OBS_WS_GUI:
     ret = await self.ws.call(req)
     
     if not ret.ok():
-      logging.error("Failed to fetch scene item ID!")
+      self.log_request_error(ret)
       self.connected = False
       return False
   
     self.video_width = ret.responseData["baseWidth"]
     self.video_height = ret.responseData["baseHeight"]
+    
+    req = simpleobsws.Request('GetInputKindList')
+    ret = await self.ws.call(req)
+    
+    if not ret.ok():
+      self.log_request_error(ret)
+    else:
+      print(ret.responseData)
     
     return True
   
@@ -478,7 +444,8 @@ class OBS_WS_GUI:
       self.log_request_error(ret)
     elif 'file' in ret.responseData['inputSettings']:
       url = ret.responseData['inputSettings']['file']
-      item.set_image(url)
+      if item.img_url != url:
+        item.set_image(url)
   
   async def get_scene_state(self):
     req = simpleobsws.Request('GetCurrentProgramScene')
@@ -542,15 +509,15 @@ class OBS_WS_GUI:
         item.source_name = i['sourceName']
         item.scene_item_index = i['sceneItemIndex']
         
-        if i['inputKind'] == 'image_source' and item.img_url == "":
+        if i['inputKind'] == 'image_source':
           await self.get_image_for_item(item)
         
       else:
-        item = OBS_Object(i['sceneItemId'], i['sceneItemIndex'], self.canvas, self.screen, x, y, w, h, sw, sh, tf['boundsType'], i['sourceName'])
-        
         if i['inputKind'] == 'image_source':
+          item = ImageInput(i['sceneItemId'], i['sceneItemIndex'], self.canvas, self.screen, x, y, w, h, sw, sh, tf['boundsType'], i['sourceName'])
           await self.get_image_for_item(item)
         else:
+          item = OBS_Object(i['sceneItemId'], i['sceneItemIndex'], self.canvas, self.screen, x, y, w, h, sw, sh, tf['boundsType'], i['sourceName'])
           item.interactable = False
           
         self.scene_items.append(item)
@@ -571,4 +538,7 @@ class OBS_WS_GUI:
     self.requests_queue.clear()
     
   def log_request_error(self, ret):
-    logging.error(f"Error {ret.requestStatus['code']}: {ret.requestStatus['comment']}")
+    try:
+      logging.error(f"Error {ret.requestStatus['code']}: {ret.requestStatus['comment']}")
+    except:
+      logging.error(ret)
