@@ -57,6 +57,7 @@ class OBS_Object:
   height = 0.0
   source_width = 0.0
   source_height = 0.0
+  selected = False
   
   x1px = 0
   y1px = 0
@@ -64,11 +65,6 @@ class OBS_Object:
   y2px = 0
   wpx = 0
   hpx = 0
-  
-  last_xpx = 0
-  last_ypx = 0
-  last_wpx = 0
-  last_hpx = 0
   
   source_name = ""
   scene_item_id = 0
@@ -85,10 +81,7 @@ class OBS_Object:
   grabber_ids = None
   
   line_width = 5
-  selected = False
-  was_selected = False
-  
-  grabber_radius = 5
+  grabber_radius = 6
   
   interactable = True
   
@@ -110,6 +103,20 @@ class OBS_Object:
     self.source_name = label
     self.interactable = interactable
     
+    self.rect_id = self.canvas.create_rectangle(0, 0, 0, 0, width = self.line_width, outline = self.default_color)
+    
+    if self.interactable:
+      tl = self.canvas.create_oval(0, 0, 0, 0, width = self.line_width, outline = "", fill = self.default_color)
+      bl = self.canvas.create_oval(0, 0, 0, 0, width = self.line_width, outline = "", fill = self.default_color)
+      tr = self.canvas.create_oval(0, 0, 0, 0, width = self.line_width, outline = "", fill = self.default_color)
+      br = self.canvas.create_oval(0, 0, 0, 0, width = self.line_width, outline = "", fill = self.default_color)
+      
+      self.grabber_ids = [tl, bl, tr, br]
+    
+    self.text_id = self.canvas.create_text(0, 0, anchor = SW, text = f"{self.source_name} ({self.scene_item_id})", fill = self.default_color)
+    
+    self.redraw()
+    
   def __del__(self):
     if self.rect_id:
       self.canvas.delete(self.rect_id)
@@ -121,61 +128,93 @@ class OBS_Object:
   def calculate_canvas_pos(self):
     self.scale = self.screen.scale
     
-    self.x1px = self.screen.xpx + (self.x * self.scale)
-    self.y1px = self.screen.ypx + (self.y * self.scale)
+    self.x1px = self.screen.x1px + (self.x * self.scale)
+    self.y1px = self.screen.y1px + (self.y * self.scale)
     self.wpx = self.width * self.scale
     self.hpx = self.height * self.scale
     self.x2px = self.x1px + self.wpx
     self.y2px = self.y1px + self.hpx
     
-  def draw(self):
-    self.calculate_canvas_pos()
+  def get_linewidth(self):
+    return math.ceil(self.line_width * self.scale) + 1
+  
+  def get_grabberradius(self):
+    return math.ceil(self.grabber_radius * self.scale) + 1
+  
+  def get_color(self):
+    return self.selected_color if self.selected else self.default_color
     
-    if self.last_xpx != self.x1px or self.last_ypx != self.y1px or self.last_wpx != self.wpx or self.last_hpx != self.hpx or self.was_selected != self.selected:
-      gpx = math.ceil(self.grabber_radius * self.scale) + 1
+  def set_transform(self, x = None, y = None, w = None, h = None):
+    x = self.x if x is None else x
+    y = self.y if y is None else y
+    w = self.width if w is None else w
+    h = self.height if h is None else h
+    
+    if self.x != x or self.y != y or self.width != w or self.height != h:
+      self.x = x
+      self.y = y
+      self.width = w
+      self.height = h
       
-      lw = math.ceil(self.line_width * self.scale) + 1
+      self.redraw()
       
-      c = self.selected_color if self.selected else self.default_color
-        
-      if not self.rect_id:
-        self.rect_id = self.canvas.create_rectangle(self.x1px, self.y1px, self.x2px, self.y2px, width = lw, outline = c)
-      else:
-        self.canvas.coords(self.rect_id, self.x1px, self.y1px, self.x2px, self.y2px)
-        self.canvas.itemconfigure(self.rect_id, width = lw, outline = c)
+  def set_selected(self, selected):
+    if self.selected != selected:
+      self.selected = selected
+      
+      c = self.get_color()
+      self.canvas.itemconfigure(self.text_id, fill = c)
+      self.canvas.itemconfigure(self.rect_id, outline = c)
+      for id in self.grabber_ids:
+        self.canvas.itemconfigure(id, fill = c)
+    
+  def set_interactable(self, interactable):
+    if self.interactable != interactable:
+      self.interactable = interactable
       
       if self.interactable:
-        if not self.grabber_ids:
-          tl = self.canvas.create_oval(self.x1px - gpx, self.y1px - gpx, self.x1px + gpx, self.y1px + gpx, width = lw, outline = c)
-          bl = self.canvas.create_oval(self.x1px - gpx, self.y2px - gpx, self.x1px + gpx, self.y2px + gpx, width = lw, outline = c)
-          tr = self.canvas.create_oval(self.x2px - gpx, self.y1px - gpx, self.x2px + gpx, self.y1px + gpx, width = lw, outline = c)
-          br = self.canvas.create_oval(self.x2px - gpx, self.y2px - gpx, self.x2px + gpx, self.y2px + gpx, width = lw, outline = c)
-          
-          self.grabber_ids = [tl, bl, tr, br]
-        else:
-          for id in self.grabber_ids:
-            self.canvas.itemconfigure(id, width = lw, outline = c)
-          
-          self.canvas.coords(self.grabber_ids[0], self.x1px - gpx, self.y1px - gpx, self.x1px + gpx, self.y1px + gpx)
-          self.canvas.coords(self.grabber_ids[1], self.x1px - gpx, self.y2px - gpx, self.x1px + gpx, self.y2px + gpx)
-          self.canvas.coords(self.grabber_ids[2], self.x2px - gpx, self.y1px - gpx, self.x2px + gpx, self.y1px + gpx)
-          self.canvas.coords(self.grabber_ids[3], self.x2px - gpx, self.y2px - gpx, self.x2px + gpx, self.y2px + gpx)
-      elif self.grabber_ids:
+        self.calculate_canvas_pos()
+        c = self.get_color()
+        lw = self.get_linewidth()
+        gpx = self.get_grabberradius()
+        tl = self.canvas.create_oval(self.x1px - gpx, self.y1px - gpx, self.x1px + gpx, self.y1px + gpx, width = lw, outline = "", fill = c)
+        bl = self.canvas.create_oval(self.x1px - gpx, self.y2px - gpx, self.x1px + gpx, self.y2px + gpx, width = lw, outline = "", fill = c)
+        tr = self.canvas.create_oval(self.x2px - gpx, self.y1px - gpx, self.x2px + gpx, self.y1px + gpx, width = lw, outline = "", fill = c)
+        br = self.canvas.create_oval(self.x2px - gpx, self.y2px - gpx, self.x2px + gpx, self.y2px + gpx, width = lw, outline = "", fill = c)
+        
+        self.grabber_ids = [tl, bl, tr, br]
+      else:
         for id in self.grabber_ids:
           self.canvas.delete(id)
         self.grabber_ids = None
+    
+  def set_source_name(self, source_name):
+    if self.source_name != source_name:
+      self.source_name = source_name
+      self.canvas.itemconfigure(self.text_id, text = f"{self.source_name} ({self.scene_item_id})")
       
-      if not self.text_id:
-        self.text_id = self.canvas.create_text(self.x1px, self.y1px - lw, anchor = SW, text = f"{self.source_name} ({self.scene_item_id})", fill = c)
-      else:
-        self.canvas.coords(self.text_id, self.x1px, self.y1px - lw)
-        self.canvas.itemconfigure(self.text_id, anchor = SW, text = f"{self.source_name} ({self.scene_item_id})", fill = c)
+  def canvas_configure(self, event = None):
+    self.scale = self.screen.scale
+    self.redraw()
       
-      self.last_xpx = self.x1px
-      self.last_ypx = self.y1px
-      self.last_wpx = self.wpx
-      self.last_hpx = self.hpx
-      self.was_selected = self.selected
+  def redraw(self):
+    self.calculate_canvas_pos()
+    gpx = self.get_grabberradius()
+    lw = self.get_linewidth()
+    
+    self.canvas.coords(self.rect_id, self.x1px, self.y1px, self.x2px, self.y2px)
+    self.canvas.itemconfigure(self.rect_id, width = lw)
+      
+    if self.interactable:
+      for id in self.grabber_ids:
+        self.canvas.itemconfigure(id, width = lw)
+      
+      self.canvas.coords(self.grabber_ids[0], self.x1px - gpx, self.y1px - gpx, self.x1px + gpx, self.y1px + gpx)
+      self.canvas.coords(self.grabber_ids[1], self.x1px - gpx, self.y2px - gpx, self.x1px + gpx, self.y2px + gpx)
+      self.canvas.coords(self.grabber_ids[2], self.x2px - gpx, self.y1px - gpx, self.x2px + gpx, self.y1px + gpx)
+      self.canvas.coords(self.grabber_ids[3], self.x2px - gpx, self.y2px - gpx, self.x2px + gpx, self.y2px + gpx)
+      
+    self.canvas.coords(self.text_id, self.x1px, self.y1px - lw)
     
   def contains(self, coords : Coords):
     x_inside = between(coords.x, self.x, self.x + self.width)
@@ -252,33 +291,32 @@ class ScreenObj(OBS_Object):
     self.height = height
     self.label = label
     
-  def draw(self):
+    self.rect_id = self.canvas.create_rectangle(0, 0, 0, 0, width = self.line_width, outline = self.default_color)
+    self.text_id = self.canvas.create_text(0, 0, anchor = SW, text = self.label, fill = self.default_color)
+    
+  def canvas_configure(self, event = None):
     self.scale = 1.0 / max(self.height / (self.canvas.winfo_height() * 2.0 / 3.0), self.width / (self.canvas.winfo_width() * 2.0 / 3.0))
+    self.redraw()
     
-    lw = math.ceil(self.line_width * self.scale) + 1
+  def redraw(self):
+    lw = self.get_linewidth()
     
-    self.xpx = 0
-    self.ypx = 0
+    self.x1px = 0
+    self.y1px = 0
     self.wpx = self.width  * self.scale
     self.hpx = self.height * self.scale
     
     if (self.anchor == 'center'):
-      self.xpx = (self.canvas.winfo_width() - self.wpx) / 2
-      self.ypx = (self.canvas.winfo_height() - self.hpx) / 2
-      x2_pixel = self.xpx + self.wpx
-      y2_pixel = self.ypx + self.hpx
+      self.x1px = (self.canvas.winfo_width() - self.wpx) / 2
+      self.y1px = (self.canvas.winfo_height() - self.hpx) / 2
+      self.x2px = self.x1px + self.wpx
+      self.y2px = self.y1px + self.hpx
     
-    if not self.rect_id:
-      self.rect_id = self.canvas.create_rectangle(self.xpx, self.ypx, x2_pixel, y2_pixel, width = lw, outline = self.default_color)
-    else:
-      self.canvas.coords(self.rect_id, self.xpx, self.ypx, x2_pixel, y2_pixel)
-      self.canvas.itemconfigure(self.rect_id, width = lw)
+    self.canvas.coords(self.rect_id, self.x1px, self.y1px, self.x2px, self.y2px)
+    self.canvas.itemconfigure(self.rect_id, width = lw)
       
-    if not self.text_id:
-      self.text_id = self.canvas.create_text(self.xpx, self.ypx - 1, anchor = SW, text = self.label, fill = self.default_color)
-    else:
-      self.canvas.coords(self.text_id, self.xpx, self.ypx - 1)
-      self.canvas.itemconfigure(self.text_id, anchor = SW, text = self.label)
+    self.canvas.coords(self.text_id, self.x1px, self.y1px - 1)
+    self.canvas.itemconfigure(self.text_id, anchor = SW, text = self.label)
       
 class ImageInput(OBS_Object):
   img_url = ""
@@ -293,53 +331,51 @@ class ImageInput(OBS_Object):
     if self.img_id:
       self.canvas.delete(self.img_id)
   
-  def draw(self):
-    self.calculate_canvas_pos()
+  def redraw(self):
+    super().redraw()
     
-    if self.last_xpx != self.x1px or self.last_ypx != self.y1px or self.last_wpx != self.wpx or self.last_hpx != self.hpx or self.was_selected != self.selected:
-      if self.orig_img:
-        imgx = self.x1px
-        imgy = self.y1px
-        imgw = round(self.wpx)
-        imgh = round(self.hpx)
-        flip_hori = False
-        flip_vert = False
+    if self.orig_img:
+      imgx = self.x1px
+      imgy = self.y1px
+      imgw = round(self.wpx)
+      imgh = round(self.hpx)
+      flip_hori = False
+      flip_vert = False
+      
+      if imgw == 0:
+        imgw = 1
+      if imgw < 0:
+        imgw = abs(imgw) 
+        imgx = imgx - imgw
+        flip_hori = True
         
-        if imgw == 0:
-          imgw = 1
-        if imgw < 0:
-          imgw = abs(imgw) 
-          imgx = imgx - imgw
-          flip_hori = True
-          
-        if imgh == 0:
-          imgh = 1
-        if imgh < 0:
-          imgh = abs(imgh)
-          imgy = imgy - imgh
-          flip_vert = True 
-        
-        self.resized_img = self.orig_img.resize((imgw, imgh))
-        self.transformed_img = self.resized_img
-        if flip_hori:
-          self.transformed_img = self.transformed_img.transpose(Image.FLIP_LEFT_RIGHT)
-        if flip_vert:
-          self.transformed_img = self.transformed_img.transpose(Image.FLIP_TOP_BOTTOM)
-        self.tk_img = ImageTk.PhotoImage(self.transformed_img)
-        if not self.img_id:
-          self.img_id = self.canvas.create_image(imgx, imgy, image = self.tk_img, anchor = NW)
-        else:
-          self.canvas.coords(self.img_id, imgx, imgy)
-          self.canvas.itemconfigure(self.img_id, image = self.tk_img)
-        
-    return super().draw()
+      if imgh == 0:
+        imgh = 1
+      if imgh < 0:
+        imgh = abs(imgh)
+        imgy = imgy - imgh
+        flip_vert = True 
+      
+      self.resized_img = self.orig_img.resize((imgw, imgh))
+      self.transformed_img = self.resized_img
+      if flip_hori:
+        self.transformed_img = self.transformed_img.transpose(Image.FLIP_LEFT_RIGHT)
+      if flip_vert:
+        self.transformed_img = self.transformed_img.transpose(Image.FLIP_TOP_BOTTOM)
+      self.tk_img = ImageTk.PhotoImage(self.transformed_img)
+      if not self.img_id:
+        self.img_id = self.canvas.create_image(imgx, imgy, image = self.tk_img, anchor = NW)
+      else:
+        self.canvas.coords(self.img_id, imgx, imgy)
+        self.canvas.itemconfigure(self.img_id, image = self.tk_img)
     
-  
-  def set_image(self, url : str):
+  def set_image_url(self, url : str):
     try:
-      self.img_url = url
-      self.orig_img = Image.open(requests.get(self.img_url, stream = True).raw)
-      print(f"image loaded from {url}")
+      if self.img_url != url:
+        self.img_url = url
+        self.orig_img = Image.open(requests.get(self.img_url, stream = True).raw)
+        self.redraw()
+        print(f"image loaded from {url}")
     except:
       print(f"failed to load image from {url}")
       self.orig_img = None

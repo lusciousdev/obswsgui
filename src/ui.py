@@ -138,8 +138,8 @@ class OBS_WS_GUI:
     
   def canvas_to_scene(self, coords : Coords):
     scene_coords = Coords()
-    scene_coords.x = round((coords.x - self.screen.xpx) / self.screen.scale)
-    scene_coords.y = round((coords.y - self.screen.ypx) / self.screen.scale)
+    scene_coords.x = round((coords.x - self.screen.x1px) / self.screen.scale)
+    scene_coords.y = round((coords.y - self.screen.y1px) / self.screen.scale)
     return scene_coords
   
   def update_lastpos(self, x, y):
@@ -170,7 +170,7 @@ class OBS_WS_GUI:
           if item.scene_item_id == under_item[0].scene_item_id:
             in_under = True
             break
-        item.selected = in_under
+        item.set_selected(in_under)
     
     already_focused = False
     for item in items_under:
@@ -179,7 +179,7 @@ class OBS_WS_GUI:
         self.manip_mode = item[1]
     if not already_focused and len(items_under) > 0:
       self.manip_mode = items_under[0][1]
-      items_under[0][0].selected = True
+      items_under[0][0].set_selected(True)
       items_under[0][0].setup_modify_ui(self)
           
   def doubleClick(self, event):
@@ -196,26 +196,26 @@ class OBS_WS_GUI:
           if item.scene_item_id == under_item[0].scene_item_id:
             in_under = True
             break
-        item.selected = in_under
+        item.set_selected(in_under)
     
     already_focused = False
     for i in range(0, len(items_under)):
       if items_under[i][0].selected:
         already_focused = True
         if len(items_under) > (i + 1):
-          items_under[i][0].selected = False
-          items_under[i + 1][0].selected = True
+          items_under[i][0].set_selected(False)
+          items_under[i + 1][0].set_selected(True)
           self.manip_mode = items_under[i+1][1]
           items_under[i + 1][0].setup_modify_ui(self)
         if i > 0 and i == len(items_under) - 1:
-          items_under[i][0].selected = False
-          items_under[0][0].selected = True
+          items_under[i][0].set_selected(False)
+          items_under[0][0].set_selected(True)
           self.manip_mode = items_under[0][1]
           items_under[0][0].setup_modify_ui(self)
         break
     if not already_focused and len(items_under) > 0:
       self.manip_mode = items_under[0][1]
-      items_under[0][0].selected = True
+      items_under[0][0].set_selected(True)
       items_under[0][0].setup_modify_ui(self)
 
   def mouseMove(self, event):
@@ -224,26 +224,30 @@ class OBS_WS_GUI:
     for item in self.scene_items:
       if item.selected:
         if self.manip_mode == MOVE:
-          item.x += diffX
-          item.y += diffY
+          x = item.x + diffX
+          y = item.y + diffY
+          item.set_transform(x = x, y = y)
         else:
+          x = item.x
+          y = item.y
+          w = item.width
+          h = item.height
           if self.manip_mode == LEFT or self.manip_mode == TOPLEFT or self.manip_mode == BOTTOMLEFT:
-            item.x += diffX
-            item.width -= diffX
+            x += diffX
+            w -= diffX
           if self.manip_mode == RIGHT or self.manip_mode == TOPRIGHT or self.manip_mode == BOTTOMRIGHT:
-            item.width += diffX
+            w += diffX
           if self.manip_mode == TOP or self.manip_mode == TOPLEFT or self.manip_mode == TOPRIGHT:
-            item.y += diffY
-            item.height -= diffY
+            y += diffY
+            h -= diffY
           if self.manip_mode == BOTTOM or self.manip_mode == BOTTOMLEFT or self.manip_mode == BOTTOMRIGHT:
-            item.height += diffY
+            h += diffY
+          item.set_transform(x, y, w, h)
         self.queue_set_item_transform(item)
         
     self.update_lastpos(event.x, event.y)
     
   def mouseUp(self, event):
-    # for item in self.scene_items:
-    #   item.selected = False
     return
   
   def get_selected_item(self):
@@ -255,13 +259,13 @@ class OBS_WS_GUI:
   def clear_canvas(self):
     self.canvas.delete("all")
     
-  def draw(self, event = None):
+  def canvas_configure(self, event = None):
     if self.canvas:
       if self.screen:
-        self.screen.draw()
+        self.screen.canvas_configure(event)
       
-      for overlay in self.scene_items:
-        overlay.draw()
+      for item in self.scene_items:
+        item.canvas_configure(event)
         
   def queue_set_item_transform(self, item : OBS_Object):
     scale_x = 1.0 if item.source_width == 0.0 else item.width / item.source_width
@@ -286,7 +290,7 @@ class OBS_WS_GUI:
     self.canvas = Canvas(self.defaultframe, background = self.background_light, bd = 0, highlightthickness = 0, relief = 'ridge')
     self.canvas.grid(column = 1, row = 0, sticky = (N, W, E, S), padx = (5, 0), pady = (0, 5))
         
-    self.canvas.bind("<Configure>", self.draw)
+    self.canvas.bind("<Configure>", self.canvas_configure)
     self.canvas.bind("<Button-1>", self.mouseDown)
     self.canvas.bind("<Double-Button-1>", self.doubleClick)
     self.canvas.bind("<ButtonRelease-1>", self.mouseUp)
@@ -296,6 +300,8 @@ class OBS_WS_GUI:
     self.addimage.grid(column = 1, row = 1, sticky = W, padx = (5, 0))
     
     self.screen = ScreenObj(self.canvas, anchor = CENTER, width = self.video_width, height = self.video_height, label = "Screen")
+    
+    self.canvas_configure()
     
   def setup_add_image_dialog(self):
     self.add_image_dialog = Toplevel(self.root)
@@ -370,7 +376,6 @@ class OBS_WS_GUI:
     
     while True:
       self.set_modification_ui()
-      self.draw()
       loop.run_until_complete(self.async_update())
       time.sleep(1.0 / 25.0)
     
@@ -444,8 +449,7 @@ class OBS_WS_GUI:
       self.log_request_error(ret)
     elif 'file' in ret.responseData['inputSettings']:
       url = ret.responseData['inputSettings']['file']
-      if item.img_url != url:
-        item.set_image(url)
+      item.set_image_url(url)
   
   async def get_scene_state(self):
     req = simpleobsws.Request('GetCurrentProgramScene')
@@ -499,14 +503,11 @@ class OBS_WS_GUI:
         h = tf['boundsHeight']
       
       if item:
-        item.x = x
-        item.y = y
-        item.width = w
-        item.height = h
+        item.set_transform(x, y, w, h)
+        item.set_source_name(i['sourceName'])
         item.source_width = sw
         item.source_height = sh
         item.bounds_type = tf['boundsType']
-        item.source_name = i['sourceName']
         item.scene_item_index = i['sceneItemIndex']
         
         if i['inputKind'] == 'image_source':
