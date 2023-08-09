@@ -17,9 +17,12 @@ class OBS_WS_GUI:
   ws = None
   requests_queue = []
   
+  framerate = 20
+  
   video_width = 1920
   video_height = 1080
   
+  platform = ""
   canvas = None
   screen = None
   current_scene = ""
@@ -102,6 +105,34 @@ class OBS_WS_GUI:
     self.style.theme_use("obswsgui")
     
     self.setup_connection_ui()
+    
+  def start_async_loop(self):
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    while True:
+      start = time.time()
+      
+      self.set_modification_ui()
+      self.queue_item_transform_requests()
+      loop.run_until_complete(self.async_update())
+      
+      waittime = (1.0 / self.framerate) - (time.time() - start)
+      if waittime > 0:
+        time.sleep(waittime)
+    
+  async def async_update(self):
+    if not self.connected and self.ready_to_connect:
+      success = await self.attempt_connection()
+      if success:
+        self.set_conn_ui_state(True, "Connected.")
+        self.clear_root()
+        self.setup_default_ui()
+      else:
+        self.set_conn_ui_state(False, "Failed to connect. Retry?")
+    if self.connected:      
+      await self.send_requests()
+      await self.get_scene_state()
     
   def clear_root(self):
     for ele in self.root.winfo_children():
@@ -369,29 +400,6 @@ class OBS_WS_GUI:
         for item in self.modifyframe.winfo_children():
           item.destroy()
     
-  def start_async_loop(self):
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    while True:
-      self.set_modification_ui()
-      self.queue_item_transform_requests()
-      loop.run_until_complete(self.async_update())
-      time.sleep(1.0 / 10.0)
-    
-  async def async_update(self):
-    if not self.connected and self.ready_to_connect:
-      success = await self.attempt_connection()
-      if success:
-        self.set_conn_ui_state(True, "Connected.")
-        self.clear_root()
-        self.setup_default_ui()
-      else:
-        self.set_conn_ui_state(False, "Failed to connect. Retry?")
-    if self.connected:      
-      await self.send_requests()
-      await self.get_scene_state()
-    
   async def attempt_connection(self):
     self.ready_to_connect = False
       
@@ -414,6 +422,16 @@ class OBS_WS_GUI:
       logging.error("Failed to connect or identify.")
       return False
     
+    req = simpleobsws.Request('GetVersion')
+    ret = await self.ws.call(req)
+    
+    if not ret.ok():
+      self.log_request_error(ret)
+      self.connected = False
+      return False
+
+    self.platform = ret.responseData['platform']
+    
     req = simpleobsws.Request('GetVideoSettings')
     ret = await self.ws.call(req)
     
@@ -424,14 +442,6 @@ class OBS_WS_GUI:
   
     self.video_width = ret.responseData["baseWidth"]
     self.video_height = ret.responseData["baseHeight"]
-    
-    req = simpleobsws.Request('GetInputKindList')
-    ret = await self.ws.call(req)
-    
-    if not ret.ok():
-      self.log_request_error(ret)
-    else:
-      print(ret.responseData)
     
     return True
   
@@ -450,6 +460,20 @@ class OBS_WS_GUI:
     elif 'file' in ret.responseData['inputSettings']:
       url = ret.responseData['inputSettings']['file']
       item.set_image_url(url)
+  
+  async def get_text_settings(self, item):
+    req = simpleobsws.Request('GetInputSettings', { 'inputName': item.source_name })
+    ret = await self.ws.call(req)
+    
+    if not ret.ok():
+      self.log_request_error(ret)
+    else:
+      if 'text' in ret.responseData['inputSettings']:
+        text = ret.responseData['inputSettings']['text']
+        item.set_text(text)
+      if 'vertical' in ret.responseData['inputSettings']:
+        vertical = ret.responseData['inputSettings']['vertical']
+        item.set_vertical(vertical)
   
   async def get_scene_state(self):
     req = simpleobsws.Request('GetCurrentProgramScene')
@@ -503,7 +527,7 @@ class OBS_WS_GUI:
         h = tf['boundsHeight']
       
       if item:
-        item.set_transform(x, y, w, h)
+        item.set_transform(x, y, w, h, local = False)
         item.set_source_name(i['sourceName'])
         item.source_width = sw
         item.source_height = sh
@@ -512,14 +536,19 @@ class OBS_WS_GUI:
         
         if i['inputKind'] == 'image_source':
           await self.get_image_for_item(item)
+        if i['inputKind'] == 'text_gdiplus_v2' or i['inputKind'] == 'text_ft2_source_v2':
+          await self.get_text_settings(item)
         
       else:
         if i['inputKind'] == 'image_source':
           item = ImageInput(i['sceneItemId'], i['sceneItemIndex'], self.canvas, self.screen, x, y, w, h, sw, sh, tf['boundsType'], i['sourceName'])
           await self.get_image_for_item(item)
+        elif i['inputKind'] == 'text_gdiplus_v2' or i['inputKind'] == 'text_ft2_source_v2':
+          item = TextInput(i['sceneItemId'], i['sceneItemIndex'], self.canvas, self.screen, x, y, w, h, sw, sh, tf['boundsType'], i['sourceName'])
+          await self.get_text_settings(item)
         else:
           item = OBS_Object(i['sceneItemId'], i['sceneItemIndex'], self.canvas, self.screen, x, y, w, h, sw, sh, tf['boundsType'], i['sourceName'])
-          item.interactable = False
+          item.set_interactable(False)
           
         self.scene_items.append(item)
             
@@ -527,7 +556,7 @@ class OBS_WS_GUI:
     self.scene_items.sort(key = lambda item: item.scene_item_index, reverse = True)
     
     for i in range(1, len(self.scene_items)):
-      self.scene_items[i - 1].move_to_front(self.scene_items[i])
+      self.scene_items[i - 1].move_to_front(self.scene_items[i].item_label_id)
       
   def queue_item_transform_requests(self):
     for item in self.scene_items:

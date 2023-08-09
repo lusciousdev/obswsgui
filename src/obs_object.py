@@ -77,7 +77,7 @@ class OBS_Object:
   canvas = None
   
   rect_id = None
-  text_id = None
+  item_label_id = None
   grabber_ids = None
   
   line_width = 5
@@ -115,7 +115,7 @@ class OBS_Object:
       
       self.grabber_ids = [tl, bl, tr, br]
     
-    self.text_id = self.canvas.create_text(0, 0, anchor = SW, text = f"{self.source_name} ({self.scene_item_id})", fill = self.default_color)
+    self.item_label_id = self.canvas.create_text(0, 0, anchor = SW, text = f"{self.source_name} ({self.scene_item_id})", fill = self.default_color)
     
     self.redraw()
     
@@ -124,8 +124,8 @@ class OBS_Object:
       self.canvas.delete(self.rect_id)
     for id in self.grabber_ids:
       self.canvas.delete(id)
-    if self.text_id:
-      self.canvas.delete(self.text_id)
+    if self.item_label_id:
+      self.canvas.delete(self.item_label_id)
       
   def calculate_canvas_pos(self):
     self.scale = self.screen.scale
@@ -146,7 +146,7 @@ class OBS_Object:
   def get_color(self):
     return self.selected_color if self.selected else self.default_color
     
-  def set_transform(self, x = None, y = None, w = None, h = None):
+  def set_transform(self, x = None, y = None, w = None, h = None, local = True):
     x = self.x if x is None else x
     y = self.y if y is None else y
     w = self.width if w is None else w
@@ -158,7 +158,7 @@ class OBS_Object:
       self.width = w
       self.height = h
       
-      self.changed = True
+      self.changed = local
       self.redraw()
       
   def set_selected(self, selected):
@@ -166,7 +166,7 @@ class OBS_Object:
       self.selected = selected
       
       c = self.get_color()
-      self.canvas.itemconfigure(self.text_id, fill = c)
+      self.canvas.itemconfigure(self.item_label_id, fill = c)
       self.canvas.itemconfigure(self.rect_id, outline = c)
       for id in self.grabber_ids:
         self.canvas.itemconfigure(id, fill = c)
@@ -194,7 +194,7 @@ class OBS_Object:
   def set_source_name(self, source_name):
     if self.source_name != source_name:
       self.source_name = source_name
-      self.canvas.itemconfigure(self.text_id, text = f"{self.source_name} ({self.scene_item_id})")
+      self.canvas.itemconfigure(self.item_label_id, text = f"{self.source_name} ({self.scene_item_id})")
       
   def canvas_configure(self, event = None):
     self.scale = self.screen.scale
@@ -217,7 +217,7 @@ class OBS_Object:
       self.canvas.coords(self.grabber_ids[2], self.x2px - gpx, self.y1px - gpx, self.x2px + gpx, self.y1px + gpx)
       self.canvas.coords(self.grabber_ids[3], self.x2px - gpx, self.y2px - gpx, self.x2px + gpx, self.y2px + gpx)
       
-    self.canvas.coords(self.text_id, self.x1px, self.y1px - lw)
+    self.canvas.coords(self.item_label_id, self.x1px, self.y1px - lw)
     
   def contains(self, coords : Coords):
     x_inside = between(coords.x, self.x, self.x + self.width)
@@ -270,8 +270,8 @@ class OBS_Object:
     if self.grabber_ids:
       for id in self.grabber_ids:
         self.canvas.tag_raise(id, self.rect_id)
-    if self.text_id:
-      self.canvas.tag_raise(self.text_id, self.grabber_ids[0])
+    if self.item_label_id:
+      self.canvas.tag_raise(self.item_label_id, self.rect_id if not self.grabber_ids else self.grabber_ids[0])
     
   def queue_move_to_front(self, gui):
     index_req = simpleobsws.Request('SetSceneItemIndex', { 'sceneName': gui.current_scene, 'sceneItemId': self.scene_item_id, 'sceneItemIndex': gui.scene_items[0].scene_item_index})
@@ -295,7 +295,7 @@ class ScreenObj(OBS_Object):
     self.label = label
     
     self.rect_id = self.canvas.create_rectangle(0, 0, 0, 0, width = self.line_width, outline = self.default_color)
-    self.text_id = self.canvas.create_text(0, 0, anchor = SW, text = self.label, fill = self.default_color)
+    self.item_label_id = self.canvas.create_text(0, 0, anchor = SW, text = self.label, fill = self.default_color)
     
   def canvas_configure(self, event = None):
     self.scale = 1.0 / max(self.height / (self.canvas.winfo_height() * 2.0 / 3.0), self.width / (self.canvas.winfo_width() * 2.0 / 3.0))
@@ -318,8 +318,8 @@ class ScreenObj(OBS_Object):
     self.canvas.coords(self.rect_id, self.x1px, self.y1px, self.x2px, self.y2px)
     self.canvas.itemconfigure(self.rect_id, width = lw)
       
-    self.canvas.coords(self.text_id, self.x1px, self.y1px - 1)
-    self.canvas.itemconfigure(self.text_id, anchor = SW, text = self.label)
+    self.canvas.coords(self.item_label_id, self.x1px, self.y1px - 1)
+    self.canvas.itemconfigure(self.item_label_id, anchor = SW, text = self.label)
       
 class ImageInput(OBS_Object):
   img_url = ""
@@ -386,7 +386,7 @@ class ImageInput(OBS_Object):
   def move_to_front(self, under = None):
     if self.img_id:
       if under:
-        self.canvas.tag_raise(self.img_id, under.text_id)
+        self.canvas.tag_raise(self.img_id, under)
       else:
         self.canvas.tag_raise(self.img_id)
         
@@ -516,3 +516,32 @@ class ImageInput(OBS_Object):
     self.deleteimage.grid(column = 0, row = 7, sticky = (W, E), pady = (0, 5))
     
     return super().setup_modify_ui(gui)
+  
+class TextInput(OBS_Object):
+  text = ""
+  text_id = None
+  
+  vertical = False
+  color = "#fff"
+  
+  def __init__(self, scene_item_id : int, scene_item_index : int, canvas : Canvas, screen, x : float, y : float, width : float, height : float, source_width : float, source_height : float, bounds_type : str, label : str = "", interactable : bool = True):
+    super().__init__(scene_item_id, scene_item_index, canvas, screen, x, y, width, height, source_width, source_height, bounds_type, label, interactable)
+    
+    self.text_id = self.canvas.create_text(self.x1px, self.y1px, fill = self.default_color, text = self.text, anchor = NW)
+    
+  def set_text(self, text):
+    if self.text != text:
+      self.text = text
+      self.canvas.itemconfigure(self.text_id, text = self.text)
+      
+  def set_vertical(self, vertical):
+    if self.vertical != vertical:
+      self.vertical = vertical
+      self.canvas.itemconfigure(self.text_id, angle = 0 if not self.vertical else 270, anchor = NW if not self.vertical else SW)
+      
+  def redraw(self):
+    super().redraw()
+    
+    if self.text_id:
+      self.canvas.coords(self.text_id, self.x1px, self.y1px)
+    
