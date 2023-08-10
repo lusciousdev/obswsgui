@@ -514,18 +514,25 @@ class OBS_WS_GUI:
 
     self.platform = ret.responseData['platform']
     
+    screenw, screenh = await self.get_video_settings()
+    
+    if not screenw or not screenh:
+      return False
+    else:
+      self.video_width = screenw
+      self.video_height = screenh
+      return True
+  
+  async def get_video_settings(self):
     req = simpleobsws.Request('GetVideoSettings')
     ret = await self.ws.call(req)
     
     if not ret.ok():
       self.log_request_error(ret)
       self.connected = False
-      return False
+      return None, None
   
-    self.video_width = ret.responseData["baseWidth"]
-    self.video_height = ret.responseData["baseHeight"]
-    
-    return True
+    return ret.responseData["baseWidth"], ret.responseData["baseHeight"]
   
   def find_scene_item(self, item_id):
     for item in self.scene_items:
@@ -568,7 +575,17 @@ class OBS_WS_GUI:
     active_scene = ret.responseData["currentProgramSceneName"]
     if self.current_scene != active_scene:
       self.current_scene = active_scene
-      self.scene_items.clear()
+      for item in self.scene_items[:]:
+        item.remove_from_canvas()
+        self.scene_items.remove(item)
+    
+    screenw, screenh = await self.get_video_settings()
+    if screenw and screenh:
+      if self.video_height != screenh or self.video_width != screenw:
+        self.video_width = screenw
+        self.video_height = screenh
+        self.screen.set_transform(w = self.video_width, h = self.video_height)
+        self.canvas_configure()
     
     req = simpleobsws.Request('GetSceneItemList', { 'sceneName' : self.current_scene })
     ret = await self.ws.call(req)
@@ -578,15 +595,15 @@ class OBS_WS_GUI:
     
     item_list = ret.responseData['sceneItems']
     
-    for saved in self.scene_items:
+    for saved in self.scene_items[:]:
       found = False
       for active in item_list:
         if saved.scene_item_id == active['sceneItemId']:
           found = True
           break
       if not found:
+        saved.remove_from_canvas()
         self.scene_items.remove(saved)
-        del saved
         
     for i in item_list:
       item = self.find_scene_item(i['sceneItemId'])

@@ -119,11 +119,13 @@ class OBS_Object:
     
     self.redraw()
     
-  def __del__(self):
+  def remove_from_canvas(self):
+    print(f"deleting {self.source_name}")
     if self.rect_id:
       self.canvas.delete(self.rect_id)
-    for id in self.grabber_ids:
-      self.canvas.delete(id)
+    if self.grabber_ids:
+      for id in self.grabber_ids:
+        self.canvas.delete(id)
     if self.item_label_id:
       self.canvas.delete(self.item_label_id)
       
@@ -419,8 +421,8 @@ class ImageInput(OBS_Object):
   transformed_img = None
   tk_img = None
   
-  def __del__(self):
-    super().__del__()
+  def remove_from_canvas(self):
+    super().remove_from_canvas()
     if self.img_id:
       self.canvas.delete(self.img_id)
   
@@ -541,10 +543,10 @@ class TextInput(OBS_Object):
     
     self.text_id = self.canvas.create_text((self.x1px + self.x2px) / 2.0, (self.y1px + self.y2px) / 2.0, fill = self.default_color, text = self.text, font = self.text_font, anchor = CENTER)
     
-  def __del__(self):
+  def remove_from_canvas(self):
     if self.text_id:
       self.canvas.delete(self.text_id)
-    return super().__del__()
+    return super().remove_from_canvas()
   
   def get_font_size(self):
     text_height = self.text_font.metrics('linespace')
