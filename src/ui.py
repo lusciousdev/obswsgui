@@ -27,7 +27,7 @@ class OBS_WS_GUI:
   screen = None
   current_scene = ""
   scene_items = []
-  selected_item = None
+  prev_selected_item = None
   
   lastpos = Coords()
   
@@ -48,11 +48,14 @@ class OBS_WS_GUI:
   
   style = None
   
+  input_types = ["image", "text"]
+  
   def __init__(self, root : Tk):
     self.root = root
     
     self.root.title("OBS WebSocket GUI")
     self.root.geometry("720x400")
+    self.root.minsize(320, 180)
     self.root.configure(background = self.background_color)
     
     self.root.columnconfigure(0, weight = 1)
@@ -63,8 +66,11 @@ class OBS_WS_GUI:
     self.pw_strvar = StringVar(self.root, "testpw")
     self.conn_submit_strvar = StringVar(self.root, "Connect")
     
-    self.new_image_name_strvar = StringVar(self.root, "")
+    self.new_input_type_strvar = StringVar(self.root, "image")
+    self.new_input_name_strvar = StringVar(self.root, "")
+    
     self.new_image_url_strvar = StringVar(self.root, "")
+    self.new_text_text_strvar = StringVar(self.root, "")
     
     self.style = ttk.Style(self.root)
     self.style.theme_create("obswsgui", parent = "alt", settings = {
@@ -89,10 +95,19 @@ class OBS_WS_GUI:
           "foreground": self.background_color
         }
       },
+      "TMenubutton": {
+        "configure": {
+          "background": self.background_button,
+          "foreground": self.text_color
+        }
+      },
       "Large.TLabel": {
         "configure": self.largefontopt
       },
       "Large.TButton": {
+        "configure": self.largefontopt
+      },
+      "Large.TMenubutton": {
         "configure": self.largefontopt
       },
       "Huge.TLabel": {
@@ -113,7 +128,7 @@ class OBS_WS_GUI:
     while True:
       start = time.time()
       
-      self.set_modification_ui()
+      self.update_modify_ui()
       self.queue_item_transform_requests()
       loop.run_until_complete(self.async_update())
       
@@ -326,7 +341,7 @@ class OBS_WS_GUI:
     self.canvas.bind("<ButtonRelease-1>", self.mouseUp)
     self.canvas.bind("<B1-Motion>", self.mouseMove)
     
-    self.addimage = ttk.Button(self.defaultframe, text = "+", command = self.setup_add_image_dialog, width = 14, style = "Large.TButton")
+    self.addimage = ttk.Button(self.defaultframe, text = "+", command = self.setup_add_input_dialog, width = 14, style = "Large.TButton")
     self.addimage.grid(column = 1, row = 1, sticky = W, padx = (5, 0))
     
     self.screen = ScreenObj(self.canvas, anchor = CENTER, width = self.video_width, height = self.video_height, label = "Screen")
@@ -334,51 +349,112 @@ class OBS_WS_GUI:
     self.canvas_configure()
     
   def setup_add_image_dialog(self):
-    self.add_image_dialog = Toplevel(self.root)
-    x = self.root.winfo_x()
-    y = self.root.winfo_y()
-    self.add_image_dialog.geometry(f"+{x + 200}+{y + 200}")
-    
-    self.add_image_dialog.protocol("WM_DELETE_WINDOW", self.close_add_image_dialog)
-    
-    self.add_image_frame = ttk.Frame(self.add_image_dialog, padding = "5 5 5 5")
-    self.add_image_frame.grid(column = 0, row = 0, sticky = (N, W, E, S))
-    self.add_image_frame.grid_columnconfigure(0, weight = 1)
-    
-    self.new_image_name_label = ttk.Label(self.add_image_frame, text = "Image name", style = "Large.TLabel")
+    self.new_image_name_label = ttk.Label(self.add_input_settings_frame, text = "Input name", style = "Large.TLabel")
     self.new_image_name_label.grid(column = 0, row = 0, sticky = W)
-    self.new_image_name_entry = ttk.Entry(self.add_image_frame, textvariable = self.new_image_name_strvar, width = 48, **self.largefontopt)
+    self.new_image_name_entry = ttk.Entry(self.add_input_settings_frame, textvariable = self.new_input_name_strvar, width = 48, **self.largefontopt)
     self.new_image_name_entry.grid(column = 0, row = 1, sticky = W, pady = (0, 10))
     
-    self.new_image_url_label = ttk.Label(self.add_image_frame, text = "Image URL (must be online)", style = "Large.TLabel")
+    self.new_image_url_label = ttk.Label(self.add_input_settings_frame, text = "Image URL (must be online)", style = "Large.TLabel")
     self.new_image_url_label.grid(column = 0, row = 2, sticky = W)
-    self.new_image_url_entry = ttk.Entry(self.add_image_frame, textvariable = self.new_image_url_strvar, width = 48, **self.largefontopt)
+    self.new_image_url_entry = ttk.Entry(self.add_input_settings_frame, textvariable = self.new_image_url_strvar, width = 48, **self.largefontopt)
     self.new_image_url_entry.grid(column = 0, row = 3, sticky = W, pady = (0, 10))
     
-    self.add_image_button_frame = ttk.Frame(self.add_image_frame)
+    self.add_image_button_frame = ttk.Frame(self.add_input_settings_frame)
     self.add_image_button_frame.grid(column = 0, row = 5, sticky=E)
     
     def addimg():
       self.queue_add_image_req()
-      self.close_add_image_dialog()
+      self.close_add_input_dialog()
     
-    self.new_image_submit = ttk.Button(self.add_image_button_frame, text = "Add image", command = addimg, padding = "5 0 0 0", style = "Large.TButton")
+    self.new_image_submit = ttk.Button(self.add_image_button_frame, text = "Add", command = addimg, padding = "5 0 0 0", style = "Large.TButton")
     self.new_image_submit.grid(column = 0, row = 0, sticky = E, padx = (5, 5))
   
-    self.new_image_cancel = ttk.Button(self.add_image_button_frame, text = "Cancel", command = self.close_add_image_dialog, style="Large.TButton")
+    self.new_image_cancel = ttk.Button(self.add_image_button_frame, text = "Cancel", command = self.close_add_input_dialog, style="Large.TButton")
     self.new_image_cancel.grid(column = 1, row = 0, sticky = E, padx = (5, 5))
     
-  def close_add_image_dialog(self):
-    self.new_image_name_strvar.set("")
+  def setup_add_text_dialog(self):
+    self.new_text_name_label = ttk.Label(self.add_input_settings_frame, text = "Input name", style = "Large.TLabel")
+    self.new_text_name_label.grid(column = 0, row = 0, sticky = W)
+    self.new_text_name_entry = ttk.Entry(self.add_input_settings_frame, textvariable = self.new_input_name_strvar, width = 48, **self.largefontopt)
+    self.new_text_name_entry.grid(column = 0, row = 1, sticky = W, pady = (0, 10))
+    
+    self.new_text_url_label = ttk.Label(self.add_input_settings_frame, text = "Text", style = "Large.TLabel")
+    self.new_text_url_label.grid(column = 0, row = 2, sticky = W)
+    self.new_text_url_entry = ttk.Entry(self.add_input_settings_frame, textvariable = self.new_text_text_strvar, width = 48, **self.largefontopt)
+    self.new_text_url_entry.grid(column = 0, row = 3, sticky = W, pady = (0, 10))
+    
+    self.add_text_button_frame = ttk.Frame(self.add_input_settings_frame)
+    self.add_text_button_frame.grid(column = 0, row = 5, sticky=E)
+    
+    def addimg():
+      self.queue_add_text_req()
+      self.close_add_input_dialog()
+    
+    self.new_image_submit = ttk.Button(self.add_text_button_frame, text = "Add", command = addimg, padding = "5 0 0 0", style = "Large.TButton")
+    self.new_image_submit.grid(column = 0, row = 0, sticky = E, padx = (5, 5))
+  
+    self.new_image_cancel = ttk.Button(self.add_text_button_frame, text = "Cancel", command = self.close_add_input_dialog, style="Large.TButton")
+    self.new_image_cancel.grid(column = 1, row = 0, sticky = E, padx = (5, 5))
+    
+  def close_add_input_dialog(self):
+    self.new_input_name_strvar.set("")
     self.new_image_url_strvar.set("")
-    self.add_image_dialog.destroy()
+    self.new_text_text_strvar.set("")
+    self.add_input_dialog.destroy()
+  
+  def setup_add_input_dialog(self):
+    x = self.root.winfo_x()
+    y = self.root.winfo_y()
+    
+    self.add_input_dialog = Toplevel(self.root, background = self.background_color)
+    self.add_input_dialog.geometry(f"+{x + 10}+{y + 50}")
+    self.add_input_dialog.minsize(200, 100)
+    self.add_input_dialog.columnconfigure(0, weight = 1)
+    
+    self.add_input_dialog.protocol("WM_DELETE_WINDOW", self.close_add_input_dialog)
+    
+    self.add_input_type_frame = ttk.Frame(self.add_input_dialog, padding = "5 5 5 5")
+    self.add_input_type_frame.grid(column = 0, row = 0, sticky = (N, W, E, S))
+    self.add_input_type_frame.grid_columnconfigure(0, weight = 1)
+    
+    self.add_input_type_label = ttk.Label(self.add_input_type_frame, text = "Input type", style = "Large.TLabel")
+    self.add_input_type_label.grid(column = 0, row = 0, sticky = W)
+    self.add_input_type_select = ttk.OptionMenu(self.add_input_type_frame, self.new_input_type_strvar, self.input_types[0], *self.input_types, command = self.new_input_type_change, style = "Large.TMenubutton")
+    self.add_input_type_select.grid(column = 0, row = 1, sticky = (W, E))
+    
+    self.add_input_settings_frame = ttk.Frame(self.add_input_dialog, padding = "5 5 5 5")
+    self.add_input_settings_frame.grid(column = 0, row = 1, sticky = (N, W, E, S))
+    self.add_input_settings_frame.grid_columnconfigure(0, weight = 1)
+    
+    self.new_input_type_change()
+    
+  def new_input_type_change(self, *args):
+    inputtype = self.new_input_type_strvar.get()
+    
+    # clear the input settings frame
+    for item in self.add_input_settings_frame.winfo_children():
+      item.destroy()
+    
+    if inputtype == "image":
+      self.setup_add_image_dialog()
+    elif inputtype == "text":
+      self.setup_add_text_dialog()
     
   def queue_add_image_req(self):
-    img_name = self.new_image_name_strvar.get()
+    img_name = self.new_input_name_strvar.get()
     img_url  = self.new_image_url_strvar.get()
     
     if img_name != "" and img_url != "":
       img_req  = simpleobsws.Request('CreateInput', { 'sceneName': self.current_scene, 'inputName': img_name, 'inputKind': 'image_source', 'inputSettings': { 'file': img_url }, 'sceneItemEnabled': True })
+      self.requests_queue.append(img_req)
+    
+  def queue_add_text_req(self):
+    input_name = self.new_input_name_strvar.get()
+    input_text = self.new_text_text_strvar.get()
+    input_kind = 'text_gdiplus_v2' if self.platform == "windows" else 'text_ft2_source_v2'
+    
+    if input_name != "":
+      img_req  = simpleobsws.Request('CreateInput', { 'sceneName': self.current_scene, 'inputName': input_name, 'inputKind': input_kind, 'inputSettings': { 'text': input_text }, 'sceneItemEnabled': True })
       self.requests_queue.append(img_req)
   
   def set_conn_ui_state(self, disabled : bool, submit_str : str):
@@ -393,12 +469,18 @@ class OBS_WS_GUI:
     self.set_conn_ui_state(True, "Attempting connection...")
     self.ready_to_connect = True
     
-  def set_modification_ui(self):
+  def clear_modify_ui(self):
+    if self.modifyframe:
+      for item in self.modifyframe.winfo_children():
+        item.destroy()
+    
+  def update_modify_ui(self):
     selected_item = self.get_selected_item()
-    if self.modifyframe and not selected_item:
-      if self.modifyframe:
-        for item in self.modifyframe.winfo_children():
-          item.destroy()
+    if self.modifyframe and (not selected_item or (self.prev_selected_item != selected_item)):
+      self.prev_selected_item = selected_item
+      self.clear_modify_ui()
+      if selected_item:
+        selected_item.setup_modify_ui(self)
     
   async def attempt_connection(self):
     self.ready_to_connect = False

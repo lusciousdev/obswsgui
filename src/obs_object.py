@@ -1,5 +1,5 @@
 from tkinter import *
-from tkinter import ttk
+from tkinter import ttk, font
 from PIL import Image, ImageTk
 import requests
 import math
@@ -272,13 +272,103 @@ class OBS_Object:
         self.canvas.tag_raise(id, self.rect_id)
     if self.item_label_id:
       self.canvas.tag_raise(self.item_label_id, self.rect_id if not self.grabber_ids else self.grabber_ids[0])
+      
+  def setup_modify_ui(self, gui):
+    return None
     
   def queue_move_to_front(self, gui):
     index_req = simpleobsws.Request('SetSceneItemIndex', { 'sceneName': gui.current_scene, 'sceneItemId': self.scene_item_id, 'sceneItemIndex': gui.scene_items[0].scene_item_index})
     gui.requests_queue.append(index_req)
+    
+  def queue_duplicate_req(self, gui):
+    img_req = simpleobsws.Request('DuplicateSceneItem', { 'sceneName': gui.current_scene, 'sceneItemId': self.scene_item_id})
+    gui.requests_queue.append(img_req)
+    
+  def setup_duplicate_dialog(self, gui):
+    self.dup_image_dialog = Toplevel(gui.root)
+    x = gui.root.winfo_x()
+    y = gui.root.winfo_y()
+    self.dup_image_dialog.geometry(f"+{x + 200}+{y + 200}")
+    
+    self.dup_image_dialog.protocol("WM_DELETE_WINDOW", self.dup_image_dialog.destroy)
+    
+    self.dup_image_frame = ttk.Frame(self.dup_image_dialog, padding = "12 12 12 12")
+    self.dup_image_frame.grid(column = 0, row = 0, sticky = (N, W, E, S))
+    self.dup_image_frame.grid_columnconfigure(0, weight = 1)
+    
+    self.dup_image_name_label = ttk.Label(self.dup_image_frame, text = f"Duplicate \"{self.source_name} ({self.scene_item_id})\"?")
+    self.dup_image_name_label.grid(column = 0, columnspan = 2, row = 0, sticky = (W, E))
+    
+    def dup():
+      self.queue_duplicate_req(gui)
+      self.dup_image_dialog.destroy()
       
-  def setup_modify_ui(self, gui):
-    return None
+    self.dup_image_submit = ttk.Button(self.dup_image_frame, text = "Yes", command = dup)
+    self.dup_image_submit.grid(column = 0, row = 1, sticky = (W, E))
+  
+    self.dup_image_cancel = ttk.Button(self.dup_image_frame, text = "No", command = self.dup_image_dialog.destroy)
+    self.dup_image_cancel.grid(column = 1, row = 1, sticky = (W, E))
+    
+  def queue_delete_req(self, gui):
+    del_req = simpleobsws.Request('RemoveSceneItem', { 'sceneName': gui.current_scene, 'sceneItemId': self.scene_item_id })
+    gui.requests_queue.append(del_req)
+    
+  def setup_delete_dialog(self, gui):
+    self.del_image_dialog = Toplevel(gui.root)
+    x = gui.root.winfo_x()
+    y = gui.root.winfo_y()
+    self.del_image_dialog.geometry(f"+{x + 200}+{y + 200}")
+    
+    self.del_image_dialog.protocol("WM_DELETE_WINDOW", self.del_image_dialog.destroy)
+    
+    self.del_image_frame = ttk.Frame(self.del_image_dialog, padding = "12 12 12 12")
+    self.del_image_frame.grid(column = 0, row = 0, sticky = (N, W, E, S))
+    self.del_image_frame.grid_columnconfigure(0, weight = 1)
+    
+    self.del_image_prompt = ttk.Label(self.del_image_frame, text = f"Are you sure you want to delete \"{self.source_name} ({self.scene_item_id})\"?")
+    self.del_image_prompt.grid(column = 0, columnspan = 2, row = 0, sticky = (W, E))
+    
+    def delimg():
+      self.queue_delete_req(gui)
+      self.del_image_dialog.destroy()
+    
+    self.del_image_submit = ttk.Button(self.del_image_frame, text = "Yes", command = delimg)
+    self.del_image_submit.grid(column = 0, row = 1, sticky = E)
+    self.del_image_cancel = ttk.Button(self.del_image_frame, text = "No", command = self.del_image_dialog.destroy)
+    self.del_image_cancel.grid(column = 1, row = 1, sticky = E)
+    
+  def queue_update_req(self, gui):
+    newname = self.modify_name_strvar.get()
+      
+    if newname != self.source_name:
+      namereq = simpleobsws.Request('SetInputName', { 'inputName': self.source_name, 'newInputName': newname})
+      gui.requests_queue.append(namereq)
+    
+  def setup_update_dialog(self, gui):
+    self.update_image_dialog = Toplevel(gui.root)
+    x = gui.root.winfo_x()
+    y = gui.root.winfo_y()
+    self.update_image_dialog.geometry(f"+{x + 200}+{y + 200}")
+    
+    self.update_image_dialog.protocol("WM_DELETE_WINDOW", self.update_image_dialog.destroy)
+    
+    self.update_image_frame = ttk.Frame(self.update_image_dialog, padding = "12 12 12 12")
+    self.update_image_frame.grid(column = 0, row = 0, sticky = (N, W, E, S))
+    
+    self.update_image_name_label = ttk.Label(self.update_image_frame, text = f"Update name and settings for \"{self.source_name} ({self.scene_item_id})\"?")
+    self.update_image_name_label.grid(column = 0, columnspan = 2, row = 0, sticky = (W, E))
+    self.update_image_warn_label = ttk.Label(self.update_image_frame, text = f"(this will affect all inputs with the same name)")
+    self.update_image_warn_label.grid(column = 0, columnspan = 2, row = 1, sticky = (W, E))
+    
+    def updatefunc():
+      self.queue_update_req(gui)
+      self.update_image_dialog.destroy()
+      
+    self.update_image_submit = ttk.Button(self.update_image_frame, text = "Yes", command = updatefunc)
+    self.update_image_submit.grid(column = 0, row = 2, sticky = (W, E))
+  
+    self.update_image_cancel = ttk.Button(self.update_image_frame, text = "No", command = self.update_image_dialog.destroy)
+    self.update_image_cancel.grid(column = 1, row = 2, sticky = (W, E))
     
 class ScreenObj(OBS_Object):
   anchor = 'center'
@@ -392,7 +482,7 @@ class ImageInput(OBS_Object):
         
     return super().move_to_front(self.img_id)
     
-  def queue_update_image_req(self, gui):
+  def queue_update_req(self, gui):
     newname = self.modify_name_strvar.get()
     newurl = self.modify_url_strvar.get()
     
@@ -402,89 +492,6 @@ class ImageInput(OBS_Object):
     if newname != self.source_name:
       namereq = simpleobsws.Request('SetInputName', { 'inputName': self.source_name, 'newInputName': self.modify_name_strvar.get()})
       gui.requests_queue.append(namereq)
-    
-  def setup_update_image_dialog(self, gui):
-    self.update_image_dialog = Toplevel(gui.root)
-    x = gui.root.winfo_x()
-    y = gui.root.winfo_y()
-    self.update_image_dialog.geometry(f"+{x + 200}+{y + 200}")
-    
-    self.update_image_dialog.protocol("WM_DELETE_WINDOW", self.update_image_dialog.destroy)
-    
-    self.update_image_frame = ttk.Frame(self.update_image_dialog, padding = "12 12 12 12")
-    self.update_image_frame.grid(column = 0, row = 0, sticky = (N, W, E, S))
-    
-    self.update_image_name_label = ttk.Label(self.update_image_frame, text = f"Update name and/or URL for \"{self.source_name} ({self.scene_item_id})\"?")
-    self.update_image_name_label.grid(column = 0, columnspan = 2, row = 0, sticky = (W, E))
-    self.update_image_warn_label = ttk.Label(self.update_image_frame, text = f"(this will affect all inputs with the same name)")
-    self.update_image_warn_label.grid(column = 0, columnspan = 2, row = 1, sticky = (W, E))
-    
-    def updatefunc():
-      self.queue_update_image_req(gui)
-      self.update_image_dialog.destroy()
-      
-    self.update_image_submit = ttk.Button(self.update_image_frame, text = "Yes", command = updatefunc)
-    self.update_image_submit.grid(column = 0, row = 2, sticky = (W, E))
-  
-    self.update_image_cancel = ttk.Button(self.update_image_frame, text = "No", command = self.update_image_dialog.destroy)
-    self.update_image_cancel.grid(column = 1, row = 2, sticky = (W, E))
-    
-  def queue_duplicate_image_req(self, gui):
-    img_req = simpleobsws.Request('DuplicateSceneItem', { 'sceneName': gui.current_scene, 'sceneItemId': self.scene_item_id})
-    gui.requests_queue.append(img_req)
-    
-  def setup_duplicate_image_dialog(self, gui):
-    self.dup_image_dialog = Toplevel(gui.root)
-    x = gui.root.winfo_x()
-    y = gui.root.winfo_y()
-    self.dup_image_dialog.geometry(f"+{x + 200}+{y + 200}")
-    
-    self.dup_image_dialog.protocol("WM_DELETE_WINDOW", self.dup_image_dialog.destroy)
-    
-    self.dup_image_frame = ttk.Frame(self.dup_image_dialog, padding = "12 12 12 12")
-    self.dup_image_frame.grid(column = 0, row = 0, sticky = (N, W, E, S))
-    self.dup_image_frame.grid_columnconfigure(0, weight = 1)
-    
-    self.dup_image_name_label = ttk.Label(self.dup_image_frame, text = f"Duplicate \"{self.source_name} ({self.scene_item_id})\"?")
-    self.dup_image_name_label.grid(column = 0, columnspan = 2, row = 0, sticky = (W, E))
-    
-    def dup():
-      self.queue_duplicate_image_req(gui)
-      self.dup_image_dialog.destroy()
-      
-    self.dup_image_submit = ttk.Button(self.dup_image_frame, text = "Yes", command = dup)
-    self.dup_image_submit.grid(column = 0, row = 1, sticky = (W, E))
-  
-    self.dup_image_cancel = ttk.Button(self.dup_image_frame, text = "No", command = self.dup_image_dialog.destroy)
-    self.dup_image_cancel.grid(column = 1, row = 1, sticky = (W, E))
-    
-  def queue_delete_image_req(self, gui):
-    del_req = simpleobsws.Request('RemoveSceneItem', { 'sceneName': gui.current_scene, 'sceneItemId': self.scene_item_id })
-    gui.requests_queue.append(del_req)
-    
-  def setup_delete_image_dialog(self, gui):
-    self.del_image_dialog = Toplevel(gui.root)
-    x = gui.root.winfo_x()
-    y = gui.root.winfo_y()
-    self.del_image_dialog.geometry(f"+{x + 200}+{y + 200}")
-    
-    self.del_image_dialog.protocol("WM_DELETE_WINDOW", self.del_image_dialog.destroy)
-    
-    self.del_image_frame = ttk.Frame(self.del_image_dialog, padding = "12 12 12 12")
-    self.del_image_frame.grid(column = 0, row = 0, sticky = (N, W, E, S))
-    self.del_image_frame.grid_columnconfigure(0, weight = 1)
-    
-    self.del_image_prompt = ttk.Label(self.del_image_frame, text = f"Are you sure you want to delete \"{self.source_name} ({self.scene_item_id})\"?")
-    self.del_image_prompt.grid(column = 0, columnspan = 2, row = 0, sticky = (W, E))
-    
-    def delimg():
-      self.queue_delete_image_req(gui)
-      self.del_image_dialog.destroy()
-    
-    self.del_image_submit = ttk.Button(self.del_image_frame, text = "Yes", command = delimg)
-    self.del_image_submit.grid(column = 0, row = 1, sticky = E)
-    self.del_image_cancel = ttk.Button(self.del_image_frame, text = "No", command = self.del_image_dialog.destroy)
-    self.del_image_cancel.grid(column = 1, row = 1, sticky = E)
   
   def setup_modify_ui(self, gui):
     gui.modifyframe.columnconfigure(0, weight = 1)
@@ -503,13 +510,13 @@ class ImageInput(OBS_Object):
     self.modify_url_entry = ttk.Entry(gui.modifyframe, textvariable = self.modify_url_strvar)
     self.modify_url_entry.grid(column = 0, row = 3, sticky = (W, E), pady = (0, 5))
     
-    self.update_button = ttk.Button(gui.modifyframe, text = "Update", command = lambda: self.setup_update_image_dialog(gui))
+    self.update_button = ttk.Button(gui.modifyframe, text = "Update", command = lambda: self.setup_update_dialog(gui))
     self.update_button.grid(column = 0, row = 4, sticky = (W, E), pady = (0, 5))
     
-    self.dupimage = ttk.Button(gui.modifyframe, text = "Duplicate", command = lambda: self.setup_duplicate_image_dialog(gui))
+    self.dupimage = ttk.Button(gui.modifyframe, text = "Duplicate", command = lambda: self.setup_duplicate_dialog(gui))
     self.dupimage.grid(column = 0, row = 5, sticky = (W, E), pady = (0, 5))
     
-    self.deleteimage = ttk.Button(gui.modifyframe, text = "Delete", command = lambda: self.setup_delete_image_dialog(gui))
+    self.deleteimage = ttk.Button(gui.modifyframe, text = "Delete", command = lambda: self.setup_delete_dialog(gui))
     self.deleteimage.grid(column = 0, row = 6, sticky = (W, E), pady = (0, 5))
     
     self.deleteimage = ttk.Button(gui.modifyframe, text = "Move to front", command = lambda: self.queue_move_to_front(gui))
@@ -521,13 +528,46 @@ class TextInput(OBS_Object):
   text = ""
   text_id = None
   
+  text_font = None
+  
   vertical = False
   color = "#fff"
   
   def __init__(self, scene_item_id : int, scene_item_index : int, canvas : Canvas, screen, x : float, y : float, width : float, height : float, source_width : float, source_height : float, bounds_type : str, label : str = "", interactable : bool = True):
+    self.text_font = font.Font(family="Helvetica", size = 1)
+    
     super().__init__(scene_item_id, scene_item_index, canvas, screen, x, y, width, height, source_width, source_height, bounds_type, label, interactable)
     
-    self.text_id = self.canvas.create_text(self.x1px, self.y1px, fill = self.default_color, text = self.text, anchor = NW)
+    
+    self.text_id = self.canvas.create_text((self.x1px + self.x2px) / 2.0, (self.y1px + self.y2px) / 2.0, fill = self.default_color, text = self.text, font = self.text_font, anchor = CENTER)
+    
+  def __del__(self):
+    if self.text_id:
+      self.canvas.delete(self.text_id)
+    return super().__del__()
+  
+  def get_font_size(self):
+    text_height = self.text_font.metrics('linespace')
+    text_width = self.text_font.measure(self.text)
+    font_size = self.text_font.actual('size')
+    
+    if abs(self.hpx) < 1 or abs(self.wpx) < 1:
+      self.text_font.config(size = 1)
+      return
+    
+    while text_height < abs(self.hpx) and text_width < abs(self.wpx):
+      font_size += 1
+      self.text_font.config(size = font_size)
+      
+      text_height = self.text_font.metrics('linespace')
+      text_width = self.text_font.measure(self.text)
+      
+    while (text_height > abs(self.hpx) or text_width > abs(self.wpx)) and font_size > 0:
+      font_size -= 1
+      self.text_font.config(size = font_size)
+      
+      text_height = self.text_font.metrics('linespace')
+      text_width = self.text_font.measure(self.text)
     
   def set_text(self, text):
     if self.text != text:
@@ -537,11 +577,89 @@ class TextInput(OBS_Object):
   def set_vertical(self, vertical):
     if self.vertical != vertical:
       self.vertical = vertical
-      self.canvas.itemconfigure(self.text_id, angle = 0 if not self.vertical else 270, anchor = NW if not self.vertical else SW)
+      self.canvas.itemconfigure(self.text_id, angle = 0 if not self.vertical else 270, anchor = CENTER)
+      
+  def move_to_front(self, under = None):
+    if self.text_id:
+      if under:
+        self.canvas.tag_raise(self.text_id, under)
+      else:
+        self.canvas.tag_raise(self.text_id)
+        
+    return super().move_to_front(self.text_id)
       
   def redraw(self):
     super().redraw()
     
-    if self.text_id:
-      self.canvas.coords(self.text_id, self.x1px, self.y1px)
+    self.get_font_size()
     
+    if self.text_id:
+      self.canvas.coords(self.text_id, (self.x1px + self.x2px) / 2.0, (self.y1px + self.y2px) / 2.0)
+      self.canvas.itemconfig(self.text_id, font = self.text_font)
+      
+  def queue_update_req(self, gui):
+    newtext = self.modify_text_strvar.get()
+    
+    if self.text != newtext:
+      req = simpleobsws.Request('SetInputSettings', { 'inputName': self.source_name, 'inputSettings': { 'text': newtext }})
+      gui.requests_queue.append(req)
+    
+    return super().queue_update_req(gui)
+  
+  def adjust_modify_ui(self, gui, val):
+    if (val.isnumeric()):
+      self.counterframe.grid()
+    else:
+      self.counterframe.grid_remove()
+    return True
+  
+  def setup_modify_ui(self, gui):
+    gui.modifyframe.columnconfigure(0, weight = 1)
+    
+    self.modify_name_label = ttk.Label(gui.modifyframe, text = "Name:")
+    self.modify_name_label.grid(column = 0, row = 0, sticky = W)
+    
+    self.modify_name_strvar = StringVar(gui.root, self.source_name)
+    self.modify_name_entry = ttk.Entry(gui.modifyframe, textvariable=self.modify_name_strvar)
+    self.modify_name_entry.grid(column = 0, row = 1, sticky = (W, E), pady = (0, 5))
+    
+    self.modify_text_label = ttk.Label(gui.modifyframe, text = "Text:")
+    self.modify_text_label.grid(column = 0, row = 2, sticky = W)
+    
+    self.modify_text_strvar = StringVar(gui.root, self.text)
+    
+    self.modify_text_entry = ttk.Entry(gui.modifyframe, textvariable = self.modify_text_strvar, validate = 'all', validatecommand=(gui.modifyframe.register(lambda val: self.adjust_modify_ui(gui, val)), '%P'))
+    self.modify_text_entry.grid(column = 0, row = 3, sticky = (W, E), pady = (0, 5))
+    
+    self.counterframe = ttk.Frame(gui.modifyframe, padding = "0 0 0 10")
+    self.counterframe.grid(column = 0, row = 4, sticky = (W, E))
+    self.counterframe.columnconfigure(0, weight = 1, uniform = "counterbuttons")
+    self.counterframe.columnconfigure(1, weight = 1, uniform = "counterbuttons")
+    def dec():
+      val = int(self.modify_text_strvar.get()) - 1
+      self.modify_text_strvar.set(f"{val}")
+      self.queue_update_req(gui)
+    self.decrement = ttk.Button(self.counterframe, text = "--", command = dec, width = 10)
+    self.decrement.grid(column = 0, row = 0, padx = (2, 2), sticky = (W, E))
+    def inc():
+      val = int(self.modify_text_strvar.get()) + 1
+      self.modify_text_strvar.set(f"{val}")
+      self.queue_update_req(gui)
+    self.increment = ttk.Button(self.counterframe, text = "++", command = inc)
+    self.increment.grid(column = 1, row = 0, padx = (2, 2), sticky = (W, E))
+    
+    self.update_button = ttk.Button(gui.modifyframe, text = "Update", command = lambda: self.setup_update_dialog(gui))
+    self.update_button.grid(column = 0, row = 5, sticky = (W, E), pady = (0, 5))
+    
+    self.dupimage = ttk.Button(gui.modifyframe, text = "Duplicate", command = lambda: self.setup_duplicate_dialog(gui))
+    self.dupimage.grid(column = 0, row = 6, sticky = (W, E), pady = (0, 5))
+    
+    self.deleteimage = ttk.Button(gui.modifyframe, text = "Delete", command = lambda: self.setup_delete_dialog(gui))
+    self.deleteimage.grid(column = 0, row = 7, sticky = (W, E), pady = (0, 5))
+    
+    self.deleteimage = ttk.Button(gui.modifyframe, text = "Move to front", command = lambda: self.queue_move_to_front(gui))
+    self.deleteimage.grid(column = 0, row = 8, sticky = (W, E), pady = (0, 5))
+    
+    self.adjust_modify_ui(gui, self.modify_text_strvar.get())
+    
+    return super().setup_modify_ui(gui)
