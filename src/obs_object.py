@@ -1,22 +1,13 @@
-from tkinter import *
-from tkinter import ttk, font
-from PIL import Image, ImageTk
-import requests
 import math
 from enum import Enum
+from tkinter import *
+from tkinter import ttk
+
 import simpleobsws
 
-class Coords:
-  x = 0
-  y = 0
-  
-  def __init__(self, x = 0, y = 0):
-    self.x = x
-    self.y = y
-    
-  def __repr__(self):
-    return f"({self.x}, {self.y})"
-  
+from geometryutil import *
+
+
 class InputKind(Enum):
   IMAGE_SOURCE = 'image_source'
   COLOR_SOURCE = 'color_source_v3'
@@ -49,20 +40,21 @@ def between(val : float, bound1 : float, bound2 : float, inclusive : bool = True
     return (bound1 <= val <= bound2) if (bound1 < bound2) else (bound2 <= val <= bound1)
   else:
     return (bound1 < val < bound2) if (bound1 < bound2) else (bound2 < val < bound1)
+  
+def flatten(l : list):
+  return [item for sublist in l for item in sublist]
 
 class OBS_Object:
   x = 0.0
   y = 0.0
   width = 0.0
   height = 0.0
+  rotation = 0.0 # in radians
   source_width = 0.0
   source_height = 0.0
   selected = False
   
-  x1px = 0
-  y1px = 0
-  x2px = 0
-  y2px = 0
+  polygon = Polygon()
   wpx = 0
   hpx = 0
   
@@ -90,7 +82,7 @@ class OBS_Object:
   
   changed = False
   
-  def __init__(self, scene_item_id : int, scene_item_index : int, canvas : Canvas, screen, x : float, y : float, width : float, height : float, source_width : float, source_height : float, bounds_type : str, label : str = "", interactable : bool = True):
+  def __init__(self, scene_item_id : int, scene_item_index : int, canvas : Canvas, screen, x : float, y : float, width : float, height : float, rotation : float, source_width : float, source_height : float, bounds_type : str, label : str = "", interactable : bool = True):
     self.scene_item_id = scene_item_id
     self.scene_item_index = scene_item_index
     self.canvas = canvas
@@ -99,13 +91,16 @@ class OBS_Object:
     self.y = y
     self.width = width
     self.height = height
+    self.rotation = rotation
     self.source_width = source_width
     self.source_height = source_height
     self.bounds_type = bounds_type
     self.source_name = label
     self.interactable = interactable
     
-    self.rect_id = self.canvas.create_rectangle(0, 0, 0, 0, width = self.line_width, outline = self.default_color)
+    self.polygon = Polygon([0, 0], [0, 0], [0, 0], [0, 0])
+    
+    self.rect_id = self.canvas.create_polygon(self.polygon.to_array(), width = self.line_width, outline = self.default_color, fill = '')
     
     if self.interactable:
       tl = self.canvas.create_oval(0, 0, 0, 0, width = self.line_width, outline = "", fill = self.default_color)
@@ -120,7 +115,6 @@ class OBS_Object:
     self.redraw()
     
   def remove_from_canvas(self):
-    print(f"deleting {self.source_name}")
     if self.rect_id:
       self.canvas.delete(self.rect_id)
     if self.grabber_ids:
@@ -132,12 +126,23 @@ class OBS_Object:
   def calculate_canvas_pos(self):
     self.scale = self.screen.scale
     
-    self.x1px = self.screen.x1px + (self.x * self.scale)
-    self.y1px = self.screen.y1px + (self.y * self.scale)
+    screenx = self.screen.polygon.point(0).x
+    screeny = self.screen.polygon.point(0).y
+    self.polygon.point(0).x = screenx + (self.x * self.scale)
+    self.polygon.point(0).y = screeny + (self.y * self.scale)
+    
     self.wpx = self.width * self.scale
     self.hpx = self.height * self.scale
-    self.x2px = self.x1px + self.wpx
-    self.y2px = self.y1px + self.hpx
+    
+    diag_length = math.sqrt(math.pow(self.wpx, 2) + math.pow(self.hpx, 2))
+    rect_angle = math.atan(self.hpx / self.wpx)
+    
+    self.polygon.point(1).x = self.polygon.point(0).x + self.wpx * math.cos(self.rotation)
+    self.polygon.point(1).y = self.polygon.point(0).y + self.wpx * math.sin(self.rotation)
+    self.polygon.point(2).x = self.polygon.point(0).x + diag_length * math.cos(self.rotation + rect_angle)
+    self.polygon.point(2).y = self.polygon.point(0).y + diag_length * math.sin(self.rotation + rect_angle)
+    self.polygon.point(3).x = self.polygon.point(0).x - self.hpx * math.cos((math.pi / 2) - self.rotation)
+    self.polygon.point(3).y = self.polygon.point(0).y + self.hpx * math.sin((math.pi / 2) - self.rotation)
     
   def get_linewidth(self):
     return math.ceil(self.line_width * self.scale) + 1
@@ -163,6 +168,14 @@ class OBS_Object:
       self.changed = local
       self.redraw()
       
+  def set_rotation(self, rotation : float, local : bool = True):
+    rotrad = rotation * math.pi / 180.0
+    if self.rotation != rotrad:
+      self.rotation = rotrad
+      
+      self.changed = local
+      self.redraw()
+      
   def set_selected(self, selected):
     if self.selected != selected:
       self.selected = selected
@@ -182,12 +195,10 @@ class OBS_Object:
         c = self.get_color()
         lw = self.get_linewidth()
         gpx = self.get_grabberradius()
-        tl = self.canvas.create_oval(self.x1px - gpx, self.y1px - gpx, self.x1px + gpx, self.y1px + gpx, width = lw, outline = "", fill = c)
-        bl = self.canvas.create_oval(self.x1px - gpx, self.y2px - gpx, self.x1px + gpx, self.y2px + gpx, width = lw, outline = "", fill = c)
-        tr = self.canvas.create_oval(self.x2px - gpx, self.y1px - gpx, self.x2px + gpx, self.y1px + gpx, width = lw, outline = "", fill = c)
-        br = self.canvas.create_oval(self.x2px - gpx, self.y2px - gpx, self.x2px + gpx, self.y2px + gpx, width = lw, outline = "", fill = c)
-        
-        self.grabber_ids = [tl, bl, tr, br]
+        self.grabber_ids = []
+        for coords in self.polygon.points():
+          grabber = self.canvas.create_oval(coords[0] - gpx, coords[1] - gpx, coords[0] + gpx, coords[1] + gpx, width = lw, outline = "", fill = c)
+          self.grabber_ids.append(grabber)
       else:
         for id in self.grabber_ids:
           self.canvas.delete(id)
@@ -207,19 +218,17 @@ class OBS_Object:
     gpx = self.get_grabberradius()
     lw = self.get_linewidth()
     
-    self.canvas.coords(self.rect_id, self.x1px, self.y1px, self.x2px, self.y2px)
+    self.canvas.coords(self.rect_id, self.polygon.to_array())
     self.canvas.itemconfigure(self.rect_id, width = lw)
       
     if self.interactable:
       for id in self.grabber_ids:
         self.canvas.itemconfigure(id, width = lw)
       
-      self.canvas.coords(self.grabber_ids[0], self.x1px - gpx, self.y1px - gpx, self.x1px + gpx, self.y1px + gpx)
-      self.canvas.coords(self.grabber_ids[1], self.x1px - gpx, self.y2px - gpx, self.x1px + gpx, self.y2px + gpx)
-      self.canvas.coords(self.grabber_ids[2], self.x2px - gpx, self.y1px - gpx, self.x2px + gpx, self.y1px + gpx)
-      self.canvas.coords(self.grabber_ids[3], self.x2px - gpx, self.y2px - gpx, self.x2px + gpx, self.y2px + gpx)
+      for i in range(0, self.polygon.size()):
+        self.canvas.coords(self.grabber_ids[i], self.polygon.point(i).x - gpx, self.polygon.point(i).y - gpx, self.polygon.point(i).x + gpx, self.polygon.point(i).y + gpx)
       
-    self.canvas.coords(self.item_label_id, self.x1px, self.y1px - lw)
+    self.canvas.coords(self.item_label_id, self.polygon.point(0).x, self.polygon.point(0).y - lw)
     
   def contains(self, coords : Coords):
     x_inside = between(coords.x, self.x, self.x + self.width)
@@ -230,14 +239,19 @@ class OBS_Object:
     if not self.interactable:
       return None
     
-    leftside = abs(coords.x - self.x) < zone
-    rightside = abs(coords.x - (self.x + self.width)) < zone
-    topside = abs(coords.y - self.y) < zone
-    bottomside = abs(coords.y - (self.y + self.height)) < zone
+    if coords.x < self.polygon.minx() - zone \
+      or coords.x > self.polygon.maxx() + zone \
+      or coords.y < self.polygon.miny() - zone \
+      or coords.y > self.polygon.maxy() + zone:
+        return None
     
+    leftside   = distance_from_line(self.polygon.point(0), self.polygon.point(3), coords) < zone
+    rightside  = distance_from_line(self.polygon.point(1), self.polygon.point(2), coords) < zone
+    topside    = distance_from_line(self.polygon.point(0), self.polygon.point(1), coords) < zone
+    bottomside = distance_from_line(self.polygon.point(2), self.polygon.point(3), coords) < zone
     
-    x_inside = between(coords.x, self.x, self.x + self.width)
-    y_inside = between(coords.y, self.y, self.y + self.height)
+    x_inside = between(coords.x, self.polygon.minx(), self.polygon.maxx())
+    y_inside = between(coords.y, self.polygon.miny(), self.polygon.maxy())
     
     if leftside:
       if topside:
@@ -371,297 +385,3 @@ class OBS_Object:
   
     self.update_image_cancel = ttk.Button(self.update_image_frame, text = "No", command = self.update_image_dialog.destroy)
     self.update_image_cancel.grid(column = 1, row = 2, sticky = (W, E))
-    
-class ScreenObj(OBS_Object):
-  anchor = 'center'
-  
-  def __init__(self, canvas : Canvas, anchor, width : float, height : float, label : str = ""):
-    self.canvas = canvas
-    self.screen = None
-    self.anchor = anchor
-    self.x = 0
-    self.y = 0
-    self.scale = 1.0
-    self.width = width
-    self.height = height
-    self.label = label
-    
-    self.rect_id = self.canvas.create_rectangle(0, 0, 0, 0, width = self.line_width, outline = self.default_color)
-    self.item_label_id = self.canvas.create_text(0, 0, anchor = SW, text = self.label, fill = self.default_color)
-    
-  def canvas_configure(self, event = None):
-    self.scale = 1.0 / max(self.height / (self.canvas.winfo_height() * 2.0 / 3.0), self.width / (self.canvas.winfo_width() * 2.0 / 3.0))
-    self.redraw()
-    
-  def redraw(self):
-    lw = self.get_linewidth()
-    
-    self.x1px = 0
-    self.y1px = 0
-    self.wpx = self.width  * self.scale
-    self.hpx = self.height * self.scale
-    
-    if (self.anchor == 'center'):
-      self.x1px = (self.canvas.winfo_width() - self.wpx) / 2
-      self.y1px = (self.canvas.winfo_height() - self.hpx) / 2
-      self.x2px = self.x1px + self.wpx
-      self.y2px = self.y1px + self.hpx
-    
-    self.canvas.coords(self.rect_id, self.x1px, self.y1px, self.x2px, self.y2px)
-    self.canvas.itemconfigure(self.rect_id, width = lw)
-      
-    self.canvas.coords(self.item_label_id, self.x1px, self.y1px - 1)
-    self.canvas.itemconfigure(self.item_label_id, anchor = SW, text = self.label)
-      
-class ImageInput(OBS_Object):
-  img_url = ""
-  img_id = None
-  orig_img = None
-  resized_img = None
-  transformed_img = None
-  tk_img = None
-  
-  def remove_from_canvas(self):
-    super().remove_from_canvas()
-    if self.img_id:
-      self.canvas.delete(self.img_id)
-  
-  def redraw(self):
-    super().redraw()
-    
-    if self.orig_img:
-      imgx = self.x1px
-      imgy = self.y1px
-      imgw = round(self.wpx)
-      imgh = round(self.hpx)
-      flip_hori = False
-      flip_vert = False
-      
-      if imgw == 0:
-        imgw = 1
-      if imgw < 0:
-        imgw = abs(imgw) 
-        imgx = imgx - imgw
-        flip_hori = True
-        
-      if imgh == 0:
-        imgh = 1
-      if imgh < 0:
-        imgh = abs(imgh)
-        imgy = imgy - imgh
-        flip_vert = True 
-      
-      self.resized_img = self.orig_img.resize((imgw, imgh))
-      self.transformed_img = self.resized_img
-      if flip_hori:
-        self.transformed_img = self.transformed_img.transpose(Image.FLIP_LEFT_RIGHT)
-      if flip_vert:
-        self.transformed_img = self.transformed_img.transpose(Image.FLIP_TOP_BOTTOM)
-      self.tk_img = ImageTk.PhotoImage(self.transformed_img)
-      if not self.img_id:
-        self.img_id = self.canvas.create_image(imgx, imgy, image = self.tk_img, anchor = NW)
-      else:
-        self.canvas.coords(self.img_id, imgx, imgy)
-        self.canvas.itemconfigure(self.img_id, image = self.tk_img)
-    
-  def set_image_url(self, url : str):
-    try:
-      if self.img_url != url:
-        self.img_url = url
-        self.orig_img = Image.open(requests.get(self.img_url, stream = True).raw)
-        self.redraw()
-        print(f"image loaded from {url}")
-    except:
-      print(f"failed to load image from {url}")
-      self.orig_img = None
-      
-  def move_to_front(self, under = None):
-    if self.img_id:
-      if under:
-        self.canvas.tag_raise(self.img_id, under)
-      else:
-        self.canvas.tag_raise(self.img_id)
-        
-    return super().move_to_front(self.img_id)
-    
-  def queue_update_req(self, gui):
-    newname = self.modify_name_strvar.get()
-    newurl = self.modify_url_strvar.get()
-    
-    if newurl != self.img_url:
-      urlreq = simpleobsws.Request('SetInputSettings', { 'inputName': self.source_name, 'inputSettings': { 'file': self.modify_url_entry.get() }})
-      gui.requests_queue.append(urlreq)
-    if newname != self.source_name:
-      namereq = simpleobsws.Request('SetInputName', { 'inputName': self.source_name, 'newInputName': self.modify_name_strvar.get()})
-      gui.requests_queue.append(namereq)
-  
-  def setup_modify_ui(self, gui):
-    gui.modifyframe.columnconfigure(0, weight = 1)
-    
-    self.modify_name_label = ttk.Label(gui.modifyframe, text = "Name:")
-    self.modify_name_label.grid(column = 0, row = 0, sticky = W)
-    
-    self.modify_name_strvar = StringVar(gui.root, self.source_name)
-    self.modify_name_entry = ttk.Entry(gui.modifyframe, textvariable=self.modify_name_strvar)
-    self.modify_name_entry.grid(column = 0, row = 1, sticky = (W, E), pady = (0, 5))
-    
-    self.modify_url_label = ttk.Label(gui.modifyframe, text = "URL:")
-    self.modify_url_label.grid(column = 0, row = 2, sticky = W)
-    
-    self.modify_url_strvar = StringVar(gui.root, self.img_url)
-    self.modify_url_entry = ttk.Entry(gui.modifyframe, textvariable = self.modify_url_strvar)
-    self.modify_url_entry.grid(column = 0, row = 3, sticky = (W, E), pady = (0, 5))
-    
-    self.update_button = ttk.Button(gui.modifyframe, text = "Update", command = lambda: self.setup_update_dialog(gui))
-    self.update_button.grid(column = 0, row = 4, sticky = (W, E), pady = (0, 5))
-    
-    self.dupimage = ttk.Button(gui.modifyframe, text = "Duplicate", command = lambda: self.setup_duplicate_dialog(gui))
-    self.dupimage.grid(column = 0, row = 5, sticky = (W, E), pady = (0, 5))
-    
-    self.deleteimage = ttk.Button(gui.modifyframe, text = "Delete", command = lambda: self.setup_delete_dialog(gui))
-    self.deleteimage.grid(column = 0, row = 6, sticky = (W, E), pady = (0, 5))
-    
-    self.deleteimage = ttk.Button(gui.modifyframe, text = "Move to front", command = lambda: self.queue_move_to_front(gui))
-    self.deleteimage.grid(column = 0, row = 7, sticky = (W, E), pady = (0, 5))
-    
-    return super().setup_modify_ui(gui)
-  
-class TextInput(OBS_Object):
-  text = ""
-  text_id = None
-  
-  text_font = None
-  
-  vertical = False
-  color = "#fff"
-  
-  def __init__(self, scene_item_id : int, scene_item_index : int, canvas : Canvas, screen, x : float, y : float, width : float, height : float, source_width : float, source_height : float, bounds_type : str, label : str = "", interactable : bool = True):
-    self.text_font = font.Font(family="Helvetica", size = 1)
-    
-    super().__init__(scene_item_id, scene_item_index, canvas, screen, x, y, width, height, source_width, source_height, bounds_type, label, interactable)
-    
-    
-    self.text_id = self.canvas.create_text((self.x1px + self.x2px) / 2.0, (self.y1px + self.y2px) / 2.0, fill = self.default_color, text = self.text, font = self.text_font, anchor = CENTER)
-    
-  def remove_from_canvas(self):
-    if self.text_id:
-      self.canvas.delete(self.text_id)
-    return super().remove_from_canvas()
-  
-  def get_font_size(self):
-    text_height = self.text_font.metrics('linespace')
-    text_width = self.text_font.measure(self.text)
-    font_size = self.text_font.actual('size')
-    
-    if abs(self.hpx) < 1 or abs(self.wpx) < 1:
-      self.text_font.config(size = 1)
-      return
-    
-    while text_height < abs(self.hpx) and text_width < abs(self.wpx):
-      font_size += 1
-      self.text_font.config(size = font_size)
-      
-      text_height = self.text_font.metrics('linespace')
-      text_width = self.text_font.measure(self.text)
-      
-    while (text_height > abs(self.hpx) or text_width > abs(self.wpx)) and font_size > 0:
-      font_size -= 1
-      self.text_font.config(size = font_size)
-      
-      text_height = self.text_font.metrics('linespace')
-      text_width = self.text_font.measure(self.text)
-    
-  def set_text(self, text):
-    if self.text != text:
-      self.text = text
-      self.canvas.itemconfigure(self.text_id, text = self.text)
-      
-  def set_vertical(self, vertical):
-    if self.vertical != vertical:
-      self.vertical = vertical
-      self.canvas.itemconfigure(self.text_id, angle = 0 if not self.vertical else 270, anchor = CENTER)
-      
-  def move_to_front(self, under = None):
-    if self.text_id:
-      if under:
-        self.canvas.tag_raise(self.text_id, under)
-      else:
-        self.canvas.tag_raise(self.text_id)
-        
-    return super().move_to_front(self.text_id)
-      
-  def redraw(self):
-    super().redraw()
-    
-    self.get_font_size()
-    
-    if self.text_id:
-      self.canvas.coords(self.text_id, (self.x1px + self.x2px) / 2.0, (self.y1px + self.y2px) / 2.0)
-      self.canvas.itemconfig(self.text_id, font = self.text_font)
-      
-  def queue_update_req(self, gui):
-    newtext = self.modify_text_strvar.get()
-    
-    if self.text != newtext:
-      req = simpleobsws.Request('SetInputSettings', { 'inputName': self.source_name, 'inputSettings': { 'text': newtext }})
-      gui.requests_queue.append(req)
-    
-    return super().queue_update_req(gui)
-  
-  def adjust_modify_ui(self, gui, val):
-    if (val.isnumeric()):
-      self.counterframe.grid()
-    else:
-      self.counterframe.grid_remove()
-    return True
-  
-  def setup_modify_ui(self, gui):
-    gui.modifyframe.columnconfigure(0, weight = 1)
-    
-    self.modify_name_label = ttk.Label(gui.modifyframe, text = "Name:")
-    self.modify_name_label.grid(column = 0, row = 0, sticky = W)
-    
-    self.modify_name_strvar = StringVar(gui.root, self.source_name)
-    self.modify_name_entry = ttk.Entry(gui.modifyframe, textvariable=self.modify_name_strvar)
-    self.modify_name_entry.grid(column = 0, row = 1, sticky = (W, E), pady = (0, 5))
-    
-    self.modify_text_label = ttk.Label(gui.modifyframe, text = "Text:")
-    self.modify_text_label.grid(column = 0, row = 2, sticky = W)
-    
-    self.modify_text_strvar = StringVar(gui.root, self.text)
-    
-    self.modify_text_entry = ttk.Entry(gui.modifyframe, textvariable = self.modify_text_strvar, validate = 'all', validatecommand=(gui.modifyframe.register(lambda val: self.adjust_modify_ui(gui, val)), '%P'))
-    self.modify_text_entry.grid(column = 0, row = 3, sticky = (W, E), pady = (0, 5))
-    
-    self.counterframe = ttk.Frame(gui.modifyframe, padding = "0 0 0 10")
-    self.counterframe.grid(column = 0, row = 4, sticky = (W, E))
-    self.counterframe.columnconfigure(0, weight = 1, uniform = "counterbuttons")
-    self.counterframe.columnconfigure(1, weight = 1, uniform = "counterbuttons")
-    def dec():
-      val = int(self.modify_text_strvar.get()) - 1
-      self.modify_text_strvar.set(f"{val}")
-      self.queue_update_req(gui)
-    self.decrement = ttk.Button(self.counterframe, text = "--", command = dec, width = 10)
-    self.decrement.grid(column = 0, row = 0, padx = (2, 2), sticky = (W, E))
-    def inc():
-      val = int(self.modify_text_strvar.get()) + 1
-      self.modify_text_strvar.set(f"{val}")
-      self.queue_update_req(gui)
-    self.increment = ttk.Button(self.counterframe, text = "++", command = inc)
-    self.increment.grid(column = 1, row = 0, padx = (2, 2), sticky = (W, E))
-    
-    self.update_button = ttk.Button(gui.modifyframe, text = "Update", command = lambda: self.setup_update_dialog(gui))
-    self.update_button.grid(column = 0, row = 5, sticky = (W, E), pady = (0, 5))
-    
-    self.dupimage = ttk.Button(gui.modifyframe, text = "Duplicate", command = lambda: self.setup_duplicate_dialog(gui))
-    self.dupimage.grid(column = 0, row = 6, sticky = (W, E), pady = (0, 5))
-    
-    self.deleteimage = ttk.Button(gui.modifyframe, text = "Delete", command = lambda: self.setup_delete_dialog(gui))
-    self.deleteimage.grid(column = 0, row = 7, sticky = (W, E), pady = (0, 5))
-    
-    self.deleteimage = ttk.Button(gui.modifyframe, text = "Move to front", command = lambda: self.queue_move_to_front(gui))
-    self.deleteimage.grid(column = 0, row = 8, sticky = (W, E), pady = (0, 5))
-    
-    self.adjust_modify_ui(gui, self.modify_text_strvar.get())
-    
-    return super().setup_modify_ui(gui)

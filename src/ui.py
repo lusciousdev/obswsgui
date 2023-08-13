@@ -10,6 +10,9 @@ from tkinter import ttk, font
 import simpleobsws
 
 from obs_object import *
+from outputbounds import *
+from textinput import *
+from imageinput import *
 
 class OBS_WS_GUI:
   ready_to_connect = False
@@ -184,8 +187,8 @@ class OBS_WS_GUI:
     
   def canvas_to_scene(self, coords : Coords):
     scene_coords = Coords()
-    scene_coords.x = round((coords.x - self.screen.x1px) / self.screen.scale)
-    scene_coords.y = round((coords.y - self.screen.y1px) / self.screen.scale)
+    scene_coords.x = round((coords.x - self.screen.polygon.point(0).x) / self.screen.scale)
+    scene_coords.y = round((coords.y - self.screen.polygon.point(0).y) / self.screen.scale)
     return scene_coords
   
   def update_lastpos(self, x, y):
@@ -205,9 +208,7 @@ class OBS_WS_GUI:
   def mouseDown(self, event):
     self.update_lastpos(event.x, event.y)
     
-    scene_coords = self.canvas_to_scene(self.lastpos)
-    
-    items_under = self.get_items_under_mouse(scene_coords)
+    items_under = self.get_items_under_mouse(self.lastpos)
     
     for item in self.scene_items:
       if item.selected:
@@ -344,7 +345,7 @@ class OBS_WS_GUI:
     self.addimage = ttk.Button(self.defaultframe, text = "+", command = self.setup_add_input_dialog, width = 14, style = "Large.TButton")
     self.addimage.grid(column = 1, row = 1, sticky = W, padx = (5, 0))
     
-    self.screen = ScreenObj(self.canvas, anchor = CENTER, width = self.video_width, height = self.video_height, label = "Screen")
+    self.screen = OutputBounds(self.canvas, anchor = CENTER, width = self.video_width, height = self.video_height, label = "Output")
     
     self.canvas_configure()
     
@@ -609,7 +610,7 @@ class OBS_WS_GUI:
       item = self.find_scene_item(i['sceneItemId'])
       tf = i['sceneItemTransform']
       
-      # print(i)
+      # print(tf)
       # print(f"X: {tf['positionX']} Y: {tf['positionY']} W: {tf['width']} H: {tf['height']} BW: {tf['boundsWidth']} BH: {tf['boundsHeight']} SX: {tf['scaleX']} SY: {tf['scaleY']} CL: {tf['cropLeft']} CR: {tf['cropRight']}")
       
       x = tf['positionX']
@@ -617,6 +618,8 @@ class OBS_WS_GUI:
       
       w = tf['width']
       h = tf['height']
+      
+      a = tf['rotation']
       
       sw = tf['sourceWidth']
       sh = tf['sourceHeight']
@@ -627,6 +630,7 @@ class OBS_WS_GUI:
       
       if item:
         item.set_transform(x, y, w, h, local = False)
+        item.set_rotation(a, local = False)
         item.set_source_name(i['sourceName'])
         item.source_width = sw
         item.source_height = sh
@@ -640,13 +644,13 @@ class OBS_WS_GUI:
         
       else:
         if i['inputKind'] == 'image_source':
-          item = ImageInput(i['sceneItemId'], i['sceneItemIndex'], self.canvas, self.screen, x, y, w, h, sw, sh, tf['boundsType'], i['sourceName'])
+          item = ImageInput(i['sceneItemId'], i['sceneItemIndex'], self.canvas, self.screen, x, y, w, h, a, sw, sh, tf['boundsType'], i['sourceName'])
           await self.get_image_for_item(item)
         elif i['inputKind'] == 'text_gdiplus_v2' or i['inputKind'] == 'text_ft2_source_v2':
-          item = TextInput(i['sceneItemId'], i['sceneItemIndex'], self.canvas, self.screen, x, y, w, h, sw, sh, tf['boundsType'], i['sourceName'])
+          item = TextInput(i['sceneItemId'], i['sceneItemIndex'], self.canvas, self.screen, x, y, w, h, a, sw, sh, tf['boundsType'], i['sourceName'])
           await self.get_text_settings(item)
         else:
-          item = OBS_Object(i['sceneItemId'], i['sceneItemIndex'], self.canvas, self.screen, x, y, w, h, sw, sh, tf['boundsType'], i['sourceName'])
+          item = OBS_Object(i['sceneItemId'], i['sceneItemIndex'], self.canvas, self.screen, x, y, w, h, a, sw, sh, tf['boundsType'], i['sourceName'])
           item.set_interactable(False)
           
         self.scene_items.append(item)
