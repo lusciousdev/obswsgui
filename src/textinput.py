@@ -72,7 +72,7 @@ class TextInput(OBS_Object):
     
     if self.text_id:
       self.canvas.coords(self.text_id, (self.polygon.point(0).x + self.polygon.point(2).x) / 2.0, (self.polygon.point(0).y + self.polygon.point(2).y) / 2.0)
-      self.canvas.itemconfig(self.text_id, font = self.text_font)
+      self.canvas.itemconfig(self.text_id, font = self.text_font, angle = (-180.0 * self.rotation / math.pi))
       
   def queue_update_req(self, gui):
     newtext = self.modify_text_strvar.get()

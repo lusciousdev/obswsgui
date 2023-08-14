@@ -1,5 +1,5 @@
 import math
-from enum import Enum
+import enum
 from tkinter import *
 from tkinter import ttk
 
@@ -8,7 +8,7 @@ import simpleobsws
 from geometryutil import *
 
 
-class InputKind(Enum):
+class InputKind(enum.Enum):
   IMAGE_SOURCE = 'image_source'
   COLOR_SOURCE = 'color_source_v3'
   SLIDESHOW = 'slideshow'
@@ -25,15 +25,15 @@ class InputKind(Enum):
   WASAPI_OUTPUT_CAPTURE = 'wasapi_output_capture'
   WASAPI_PROCESS_OUTPUT_CAPTURE = 'wasapi_process_output_capture'
   
-MOVE = 'move'
-TOPLEFT = 'resize_tl'
-TOPRIGHT = 'resize_tr'
-BOTTOMLEFT = 'resize_bl'
-BOTTOMRIGHT = 'resize_br'
-LEFT = 'resize_l'
-RIGHT = 'resize_r'
-TOP = 'resize_t'
-BOTTOM = 'resize_b'
+class ModifyType(enum.IntFlag):
+  NONE   = 0
+  MOVE   = enum.auto()
+  LEFT   = enum.auto()
+  RIGHT  = enum.auto()
+  TOP    = enum.auto()
+  BOTTOM = enum.auto()
+  ROTATE = enum.auto()
+  
 
 def between(val : float, bound1 : float, bound2 : float, inclusive : bool = True):
   if inclusive:
@@ -71,9 +71,14 @@ class OBS_Object:
   rect_id = None
   item_label_id = None
   grabber_ids = None
+  rotator_grabber_id = None
+  rotator_line_id = None
   
-  line_width = 5
-  grabber_radius = 6
+  rotator_dist = 40
+  rotator_grabber_pos : Coords = Coords()
+  
+  line_width = 4
+  grabber_radius = 8
   
   interactable = True
   
@@ -109,8 +114,11 @@ class OBS_Object:
       br = self.canvas.create_oval(0, 0, 0, 0, width = self.line_width, outline = "", fill = self.default_color)
       
       self.grabber_ids = [tl, bl, tr, br]
+      
+      self.rotator_grabber_id = self.canvas.create_oval(0, 0, 0, 0, width = self.line_width, outline = "", fill = self.default_color)
+      self.rotator_line_id    = self.canvas.create_line(0, 0, 0, 0, width = self.line_width, fill = self.default_color)
     
-    self.item_label_id = self.canvas.create_text(0, 0, anchor = SW, text = f"{self.source_name} ({self.scene_item_id})", fill = self.default_color)
+    self.item_label_id = self.canvas.create_text(0, 0, anchor = SW, text = f"{self.source_name} ({self.scene_item_id})", fill = self.default_color, angle = 0)
     
     self.redraw()
     
@@ -135,45 +143,44 @@ class OBS_Object:
     self.hpx = self.height * self.scale
     
     diag_length = math.sqrt(math.pow(self.wpx, 2) + math.pow(self.hpx, 2))
-    rect_angle = math.atan(self.hpx / self.wpx)
+    rect_angle = Coords(self.wpx, self.hpx).angle()
     
     self.polygon.point(1).x = self.polygon.point(0).x + self.wpx * math.cos(self.rotation)
     self.polygon.point(1).y = self.polygon.point(0).y + self.wpx * math.sin(self.rotation)
+    
     self.polygon.point(2).x = self.polygon.point(0).x + diag_length * math.cos(self.rotation + rect_angle)
     self.polygon.point(2).y = self.polygon.point(0).y + diag_length * math.sin(self.rotation + rect_angle)
+    
     self.polygon.point(3).x = self.polygon.point(0).x - self.hpx * math.cos((math.pi / 2) - self.rotation)
     self.polygon.point(3).y = self.polygon.point(0).y + self.hpx * math.sin((math.pi / 2) - self.rotation)
     
   def get_linewidth(self):
-    return math.ceil(self.line_width * self.scale) + 1
+    return max(1, math.ceil(self.line_width * self.scale))
   
   def get_grabberradius(self):
-    return math.ceil(self.grabber_radius * self.scale) + 1
+    return max(1, math.ceil(self.grabber_radius * self.scale))
+  
+  def get_rotatordist(self):
+    return max(1, math.ceil(self.rotator_dist * self.scale))
   
   def get_color(self):
     return self.selected_color if self.selected else self.default_color
     
-  def set_transform(self, x = None, y = None, w = None, h = None, local = True):
+  def set_transform(self, x = None, y = None, w = None, h = None, rot = None, local = True):
     x = self.x if x is None else x
     y = self.y if y is None else y
     w = self.width if w is None else w
     h = self.height if h is None else h
+    rot = self.rotation if rot is None else rot
     
-    if self.x != x or self.y != y or self.width != w or self.height != h:
+    if self.x != x or self.y != y or self.width != w or self.height != h or self.rotation != rot:
       self.x = x
       self.y = y
       self.width = w
       self.height = h
+      self.rotation = rot
       
-      self.changed = local
-      self.redraw()
-      
-  def set_rotation(self, rotation : float, local : bool = True):
-    rotrad = rotation * math.pi / 180.0
-    if self.rotation != rotrad:
-      self.rotation = rotrad
-      
-      self.changed = local
+      self.changed |= local
       self.redraw()
       
   def set_selected(self, selected):
@@ -185,6 +192,8 @@ class OBS_Object:
       self.canvas.itemconfigure(self.rect_id, outline = c)
       for id in self.grabber_ids:
         self.canvas.itemconfigure(id, fill = c)
+      self.canvas.itemconfigure(self.rotator_grabber_id, fill = c)
+      self.canvas.itemconfigure(self.rotator_line_id, fill = c)
     
   def set_interactable(self, interactable):
     if self.interactable != interactable:
@@ -197,12 +206,27 @@ class OBS_Object:
         gpx = self.get_grabberradius()
         self.grabber_ids = []
         for coords in self.polygon.points():
-          grabber = self.canvas.create_oval(coords[0] - gpx, coords[1] - gpx, coords[0] + gpx, coords[1] + gpx, width = lw, outline = "", fill = c)
+          grabber = self.canvas.create_oval(coords.x - gpx, coords.y - gpx, coords.x + gpx, coords.y + gpx, width = lw, outline = "", fill = c)
           self.grabber_ids.append(grabber)
+        
+        top_middle = (self.polygon.point(0) + self.polygon.point(1)) / 2.0
+        rpx = self.get_rotatordist()
+        
+        inter_pos = Coords(0, math.copysign(rpx, self.hpx))
+        inter_pos.rotate(self.rotation)
+        self.rotator_grabber_pos = top_middle - inter_pos
+        
+        self.rotator_grabber_id = self.canvas.create_oval(self.rotator_grabber_pos.x - gpx, self.rotator_grabber_pos.y - gpx, self.rotator_grabber_pos.x + gpx, self.rotator_grabber_pos.y + gpx, width = lw, outline = "", fill = c)
+        self.rotator_line_id = self.canvas.create_line(top_middle.x, top_middle.y, self.rotator_grabber_pos.x, self.rotator_grabber_pos.y, width = lw, outline = "", fill = c)
       else:
         for id in self.grabber_ids:
           self.canvas.delete(id)
         self.grabber_ids = None
+        
+        self.canvas.delete(self.rotator_grabber_id)
+        self.canvas.delete(self.rotator_line_id)
+        self.rotator_grabber_id = None
+        self.rotator_line_id = None
     
   def set_source_name(self, source_name):
     if self.source_name != source_name:
@@ -227,55 +251,68 @@ class OBS_Object:
       
       for i in range(0, self.polygon.size()):
         self.canvas.coords(self.grabber_ids[i], self.polygon.point(i).x - gpx, self.polygon.point(i).y - gpx, self.polygon.point(i).x + gpx, self.polygon.point(i).y + gpx)
+        
+      top_middle = (self.polygon.point(0) + self.polygon.point(1)) / 2.0
+      rpx = self.get_rotatordist()
+      
+      inter_pos = Coords(0, math.copysign(rpx, self.hpx))
+      inter_pos.rotate(self.rotation)
+      self.rotator_grabber_pos = top_middle - inter_pos
+      
+      self.canvas.coords(self.rotator_grabber_id, self.rotator_grabber_pos.x - gpx, self.rotator_grabber_pos.y - gpx, self.rotator_grabber_pos.x + gpx, self.rotator_grabber_pos.y + gpx)
+      self.canvas.coords(self.rotator_line_id, top_middle.x, top_middle.y, self.rotator_grabber_pos.x, self.rotator_grabber_pos.y)
       
     self.canvas.coords(self.item_label_id, self.polygon.point(0).x, self.polygon.point(0).y - lw)
     
+    textangle = (-180.0 * self.rotation / math.pi)
+    
+    self.canvas.itemconfig(self.item_label_id, angle = textangle)
+    
   def contains(self, coords : Coords):
-    x_inside = between(coords.x, self.x, self.x + self.width)
-    y_inside = between(coords.y, self.y, self.y + self.height)
-    return x_inside and y_inside
+    return point_in_polygon(self.polygon, coords)
   
-  def move_or_resize(self, coords : Coords, zone : int = 10):
+  def move_or_resize(self, coords : Coords, zone : int = 10) -> int:
     if not self.interactable:
-      return None
+      return ModifyType.NONE
     
-    if coords.x < self.polygon.minx() - zone \
-      or coords.x > self.polygon.maxx() + zone \
-      or coords.y < self.polygon.miny() - zone \
-      or coords.y > self.polygon.maxy() + zone:
-        return None
+    xs = [p.x for p in self.polygon.points()]
+    ys = [p.y for p in self.polygon.points()]
     
-    leftside   = distance_from_line(self.polygon.point(0), self.polygon.point(3), coords) < zone
-    rightside  = distance_from_line(self.polygon.point(1), self.polygon.point(2), coords) < zone
-    topside    = distance_from_line(self.polygon.point(0), self.polygon.point(1), coords) < zone
-    bottomside = distance_from_line(self.polygon.point(2), self.polygon.point(3), coords) < zone
+    xs.append(self.rotator_grabber_pos.x)
+    ys.append(self.rotator_grabber_pos.y)
     
-    x_inside = between(coords.x, self.polygon.minx(), self.polygon.maxx())
-    y_inside = between(coords.y, self.polygon.miny(), self.polygon.maxy())
+    minx = min(xs)
+    maxx = max(xs)
+    miny = min(ys)
+    maxy = max(ys)
     
+    if coords.x < minx - zone \
+      or coords.x > maxx + zone \
+      or coords.y < miny - zone \
+      or coords.y > maxy + zone:
+        return ModifyType.NONE
+    
+    leftside   = distance_from_segment(self.polygon.point(0), self.polygon.point(3), coords) < zone
+    rightside  = distance_from_segment(self.polygon.point(1), self.polygon.point(2), coords) < zone
+    topside    = distance_from_segment(self.polygon.point(0), self.polygon.point(1), coords) < zone
+    bottomside = distance_from_segment(self.polygon.point(2), self.polygon.point(3), coords) < zone
+    
+    ret = ModifyType.NONE
     if leftside:
-      if topside:
-        return TOPLEFT
-      elif bottomside:
-        return BOTTOMLEFT
-      elif y_inside:
-        return LEFT
-    elif rightside:
-      if topside:
-        return TOPRIGHT
-      elif bottomside:
-        return BOTTOMRIGHT
-      elif y_inside:
-        return RIGHT
-    elif topside and x_inside:
-      return TOP
-    elif bottomside and x_inside:
-      return BOTTOM
-    else:
-      if self.contains(coords):
-        return MOVE
+      ret |= ModifyType.LEFT
+    if rightside:
+      ret |= ModifyType.RIGHT
+    if topside:
+      ret |= ModifyType.TOP
+    if bottomside:
+      ret |= ModifyType.BOTTOM
+    if ret == 0:
+      if point_in_polygon(self.polygon, coords):
+        ret = ModifyType.MOVE
+      elif distance(self.rotator_grabber_pos, coords) < zone:
+        ret = ModifyType.ROTATE
       
-    return None
+    return ret
   
   def move_to_front(self, under = None):
     if self.rect_id:

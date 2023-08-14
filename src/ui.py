@@ -200,7 +200,7 @@ class OBS_WS_GUI:
     
     for item in self.scene_items:
       manip_mode = item.move_or_resize(coords)
-      if manip_mode:
+      if manip_mode != ModifyType.NONE:
         items_under.append((item, manip_mode))
         
     return items_under
@@ -270,25 +270,64 @@ class OBS_WS_GUI:
     diffY = round((event.y - self.lastpos.y) / self.screen.scale)
     for item in self.scene_items:
       if item.selected:
-        if self.manip_mode == MOVE:
+        if self.manip_mode == ModifyType.MOVE:
           x = item.x + diffX
           y = item.y + diffY
           item.set_transform(x = x, y = y)
+        elif self.manip_mode == ModifyType.ROTATE:
+          center = item.polygon.centroid()
+          v1 = self.lastpos - center
+          v2 = Coords(event.x, event.y) - center
+          
+          a1 = v1.angle()
+          a2 = v2.angle()
+          adelta = a2 - a1
+          
+          normalized_center = (center - item.polygon.point(0)) / self.screen.scale
+          
+          rotated_center = normalized_center.__copy__()
+          rotated_center.rotate(adelta)
+          
+          displacement = rotated_center - normalized_center
+          
+          new_rot = item.rotation + adelta
+          new_x = item.x - displacement.x
+          new_y = item.y - displacement.y
+          
+          item.set_transform(x = new_x, y = new_y, rot = new_rot)
         else:
           x = item.x
           y = item.y
           w = item.width
           h = item.height
-          if self.manip_mode == LEFT or self.manip_mode == TOPLEFT or self.manip_mode == BOTTOMLEFT:
-            x += diffX
-            w -= diffX
-          if self.manip_mode == RIGHT or self.manip_mode == TOPRIGHT or self.manip_mode == BOTTOMRIGHT:
-            w += diffX
-          if self.manip_mode == TOP or self.manip_mode == TOPLEFT or self.manip_mode == TOPRIGHT:
-            y += diffY
-            h -= diffY
-          if self.manip_mode == BOTTOM or self.manip_mode == BOTTOMLEFT or self.manip_mode == BOTTOMRIGHT:
-            h += diffY
+          
+          moveangle = Coords(diffX, diffY).angle()
+          aprime = moveangle - item.rotation
+          movedist = math.sqrt(math.pow(diffX, 2) + math.pow(diffY, 2))
+          rotatedX = movedist * math.cos(aprime)
+          rotatedY = movedist * math.sin(aprime)
+          
+          if (self.manip_mode & ModifyType.LEFT != 0):
+            corrX = rotatedX * math.cos(item.rotation)
+            corrY = rotatedX * math.sin(item.rotation)
+            x += corrX
+            y += corrY
+          
+          if (self.manip_mode & ModifyType.TOP != 0):
+            corrX = rotatedY * math.cos((math.pi / 2) - item.rotation)
+            corrY = rotatedY * math.sin((math.pi / 2) - item.rotation)
+            x -= corrX
+            y += corrY
+          
+          if self.manip_mode & ModifyType.LEFT != 0:
+            w -= rotatedX
+          if self.manip_mode & ModifyType.RIGHT != 0:
+            w += rotatedX
+          if self.manip_mode & ModifyType.TOP != 0:
+            h -= rotatedY
+          if self.manip_mode & ModifyType.BOTTOM != 0:
+            h += rotatedY
+            
           item.set_transform(x, y, w, h)
         
     self.update_lastpos(event.x, event.y)
@@ -316,10 +355,11 @@ class OBS_WS_GUI:
   def queue_set_item_transform(self, item : OBS_Object):
     scale_x = 1.0 if item.source_width == 0.0 else item.width / item.source_width
     scale_y = 1.0 if item.source_height == 0.0 else item.height / item.source_height
+    rot = (180.0 * item.rotation / math.pi) % 360.0
     if item.bounds_type == 'OBS_BOUNDS_SCALE_INNER':
-      tf_req = simpleobsws.Request('SetSceneItemTransform', { 'sceneName': self.current_scene, 'sceneItemId': item.scene_item_id, 'sceneItemTransform': { 'positionX': item.x, 'positionY': item.y, 'boundsWidth': item.width, 'boundsHeight': item.height }})
+      tf_req = simpleobsws.Request('SetSceneItemTransform', { 'sceneName': self.current_scene, 'sceneItemId': item.scene_item_id, 'sceneItemTransform': { 'positionX': item.x, 'positionY': item.y, 'boundsWidth': item.width, 'boundsHeight': item.height, 'rotation': rot }})
     else:
-      tf_req = simpleobsws.Request('SetSceneItemTransform', { 'sceneName': self.current_scene, 'sceneItemId': item.scene_item_id, 'sceneItemTransform': { 'positionX': item.x, 'positionY': item.y, 'scaleX': scale_x, 'scaleY': scale_y }})
+      tf_req = simpleobsws.Request('SetSceneItemTransform', { 'sceneName': self.current_scene, 'sceneItemId': item.scene_item_id, 'sceneItemTransform': { 'positionX': item.x, 'positionY': item.y, 'scaleX': scale_x, 'scaleY': scale_y, 'rotation': rot }})
       
     self.requests_queue.append(tf_req)
     
@@ -629,8 +669,7 @@ class OBS_WS_GUI:
         h = tf['boundsHeight']
       
       if item:
-        item.set_transform(x, y, w, h, local = False)
-        item.set_rotation(a, local = False)
+        item.set_transform(x, y, w, h, (math.pi * a / 180.0), local = False)
         item.set_source_name(i['sourceName'])
         item.source_width = sw
         item.source_height = sh

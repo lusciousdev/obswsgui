@@ -19,11 +19,8 @@ class ImageInput(OBS_Object):
     super().redraw()
     
     if self.orig_img:
-      xs = [coord.x for coord in self.polygon.points()]
-      ys = [coord.y for coord in self.polygon.points()]
-      
-      imgx = min(xs)
-      imgy = min(ys)
+      imgx = self.polygon.minx()
+      imgy = self.polygon.miny()
       imgw = int(self.wpx)
       imgh = int(self.hpx)
       flip_hori = False
@@ -33,16 +30,14 @@ class ImageInput(OBS_Object):
         imgw = 1
       if imgw < 0:
         imgw = abs(imgw) 
-        imgx = imgx - imgw
         flip_hori = True
         
       if imgh == 0:
         imgh = 1
       if imgh < 0:
         imgh = abs(imgh)
-        imgy = imgy - imgh
         flip_vert = True 
-      
+        
       self.resized_img = self.orig_img.resize((imgw, imgh))
       self.transformed_img = Image.new('RGBA', self.resized_img.size)
       self.transformed_img.paste(self.resized_img, None)
@@ -58,15 +53,15 @@ class ImageInput(OBS_Object):
         self.canvas.itemconfigure(self.img_id, image = self.tk_img)
     
   def set_image_url(self, url : str):
-    try:
-      if self.img_url != url:
+    if self.img_url != url:
+      try:
         self.img_url = url
         self.orig_img = Image.open(requests.get(self.img_url, stream = True).raw)
-        self.redraw()
         print(f"image loaded from {url}")
-    except:
-      print(f"failed to load image from {url}")
-      self.orig_img = None
+      except:
+        print(f"failed to load image from {url}")
+        self.orig_img = None
+      self.redraw()
       
   def move_to_front(self, under = None):
     if self.img_id:
