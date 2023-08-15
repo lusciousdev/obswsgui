@@ -1,59 +1,66 @@
 import logging
+
 logging.basicConfig(level = logging.INFO)
 
 import asyncio
 import time
-
-from tkinter import *
-from tkinter import ttk, font
+import math
+import tkinter as tk
+from tkinter import font, ttk
+from typing import List, Tuple
 
 import simpleobsws
 
-from obs_object import *
-from outputbounds import *
-from textinput import *
-from imageinput import *
+import imageinput as imgin
+import obs_object as obsobj
+import outputbounds as bounds
+import textinput as textin
+import geometryutil as geom
 
 class OBS_WS_GUI:
-  ready_to_connect = False
-  connected = False
-  ws = None
-  requests_queue = []
+  ready_to_connect : bool = False
+  connected : bool = False
   
-  framerate = 20
+  ws : simpleobsws.WebSocketClient = None
+  requests_queue : List[simpleobsws.Request] = []
   
-  video_width = 1920
-  video_height = 1080
+  framerate : float = 20.0
   
-  platform = ""
-  canvas = None
-  screen = None
-  current_scene = ""
-  scene_items = []
-  prev_selected_item = None
+  output_width : float  = 1920.0
+  output_height : float = 1080.0
   
-  lastpos = Coords()
+  platform : str = ""
+  canvas : tk.Canvas = None
+  screen : bounds.OutputBounds = None
+  current_scene : str = ""
+  scene_items : List[obsobj.OBS_Object] = []
+  prev_selected_item : obsobj.OBS_Object = None
   
-  manip_mode = None
+  lastpos : geom.Coords = geom.Coords()
   
-  modifyframe = None
+  manip_mode : obsobj.ModifyType = obsobj.ModifyType.NONE
   
-  defaultfontopt = { 'font': ("Helvetica",  9) }
-  largefontopt   = { 'font': ("Helvetica", 16) }
-  hugefontopt    = { 'font': ("Helvetica", 24) }
+  modifyframe : ttk.Frame = None
   
-  background_color  = "#0e0e10"
-  background_medium = "#18181b"
-  background_light  = "#1f1f23"
-  background_button = "#2e2e35"
-  text_color        = "#efeff1"
-  accent_color      = "#fab4ff"
+  defaultfontopt : dict = { 'font': ("Helvetica",  9) }
+  largefontopt   : dict = { 'font': ("Helvetica", 16) }
+  hugefontopt    : dict = { 'font': ("Helvetica", 24) }
   
-  style = None
+  background_color  : str = "#0e0e10"
+  background_medium : str = "#18181b"
+  background_light  : str = "#1f1f23"
+  background_button : str = "#2e2e35"
+  text_color        : str = "#efeff1"
+  accent_color      : str = "#fab4ff"
   
-  input_types = ["image", "text"]
+  style : ttk.Style = None
   
-  def __init__(self, root : Tk):
+  input_types : List[str] = ["image", "text"]
+  
+  rotation_groove : float = 8.0 # degrees
+  edge_groove     : float = 8.0 # pixels
+  
+  def __init__(self, root : tk.Tk) -> None:
     self.root = root
     
     self.root.title("OBS WebSocket GUI")
@@ -64,16 +71,16 @@ class OBS_WS_GUI:
     self.root.columnconfigure(0, weight = 1)
     self.root.rowconfigure(0, weight = 1)
     
-    self.ip_addr_strvar = StringVar(self.root, value = "127.0.0.1")
-    self.port_strvar = StringVar(self.root, "4455")
-    self.pw_strvar = StringVar(self.root, "testpw")
-    self.conn_submit_strvar = StringVar(self.root, "Connect")
+    self.ip_addr_strvar     = tk.StringVar(self.root, value = "127.0.0.1")
+    self.port_strvar        = tk.StringVar(self.root, "4455")
+    self.pw_strvar          = tk.StringVar(self.root, "testpw")
+    self.conn_submit_strvar = tk.StringVar(self.root, "Connect")
     
-    self.new_input_type_strvar = StringVar(self.root, "image")
-    self.new_input_name_strvar = StringVar(self.root, "")
+    self.new_input_type_strvar = tk.StringVar(self.root, "image")
+    self.new_input_name_strvar = tk.StringVar(self.root, "")
     
-    self.new_image_url_strvar = StringVar(self.root, "")
-    self.new_text_text_strvar = StringVar(self.root, "")
+    self.new_image_url_strvar = tk.StringVar(self.root, "")
+    self.new_text_text_strvar = tk.StringVar(self.root, "")
     
     self.style = ttk.Style(self.root)
     self.style.theme_create("obswsgui", parent = "alt", settings = {
@@ -152,61 +159,64 @@ class OBS_WS_GUI:
       await self.send_requests()
       await self.get_scene_state()
     
-  def clear_root(self):
+  def clear_root(self) -> None:
     for ele in self.root.winfo_children():
       ele.destroy()
     
-  def setup_connection_ui(self):
+  def setup_connection_ui(self) -> None:
     self.connframe = ttk.Frame(self.root, padding = "12 12 12 12")
-    self.connframe.place(relx = 0.5, rely = 0.5, anchor = CENTER)
+    self.connframe.place(relx = 0.5, rely = 0.5, anchor = tk.CENTER)
     
     self.ip_addr_frame = ttk.Frame(self.connframe, padding = "2 2 2 2")
-    self.ip_addr_frame.grid(column = 0, row = 0, sticky = (N, W, E))
+    self.ip_addr_frame.grid(column = 0, row = 0, sticky = (tk.N, tk.W, tk.E))
     
     self.ip_addr_label = ttk.Label(self.ip_addr_frame, text = "IP Address/URL", style="Large.TLabel")
-    self.ip_addr_label.grid(column = 0, row = 0, sticky = W)
+    self.ip_addr_label.grid(column = 0, row = 0, sticky = tk.W)
     self.port_label = ttk.Label(self.ip_addr_frame, text = "Port", style="Large.TLabel")
-    self.port_label.grid(column = 1, row = 0, sticky = W)
+    self.port_label.grid(column = 1, row = 0, sticky = tk.W)
     
     self.ip_addr_entry = ttk.Entry(self.ip_addr_frame, textvariable = self.ip_addr_strvar, width = 25, **self.largefontopt)
-    self.ip_addr_entry.grid(column = 0, row = 1, sticky = (W, E))
+    self.ip_addr_entry.grid(column = 0, row = 1, sticky = (tk.W, tk.E))
     self.port_entry = ttk.Entry(self.ip_addr_frame, textvariable = self.port_strvar, width = 8, **self.largefontopt)
-    self.port_entry.grid(column = 1, row = 1, sticky = (W, E))
+    self.port_entry.grid(column = 1, row = 1, sticky = (tk.W, tk.E))
     
     self.pw_frame = ttk.Frame(self.connframe, padding = "2 2 2 2")
-    self.pw_frame.grid(column = 0, row = 1, sticky = (S, W, E))
+    self.pw_frame.grid(column = 0, row = 1, sticky = (tk.S, tk.W, tk.E))
     self.pw_frame.grid_columnconfigure(1, weight = 1)
     
     self.pw_label = ttk.Label(self.pw_frame, text = "Password: ", style="Large.TLabel")
     self.pw_label.grid(column = 0, row = 0)
     self.pw_entry = ttk.Entry(self.pw_frame, textvariable = self.pw_strvar, **self.largefontopt)
-    self.pw_entry.grid(column = 1, row = 0, sticky = (W, E))
+    self.pw_entry.grid(column = 1, row = 0, sticky = (tk.W, tk.E))
     
     self.conn_submit = ttk.Button(self.connframe, textvariable = self.conn_submit_strvar, command = self.start_connection_attempt, style="Large.TButton")
-    self.conn_submit.grid(column = 0, row = 2, sticky = (W, E))
+    self.conn_submit.grid(column = 0, row = 2, sticky = (tk.W, tk.E))
     
-  def canvas_to_scene(self, coords : Coords):
-    scene_coords = Coords()
+  def canvas_to_scene(self, coords : geom.Coords) -> geom.Coords:
+    scene_coords = geom.Coords()
     scene_coords.x = round((coords.x - self.screen.polygon.point(0).x) / self.screen.scale)
     scene_coords.y = round((coords.y - self.screen.polygon.point(0).y) / self.screen.scale)
     return scene_coords
   
-  def update_lastpos(self, x, y):
+  def update_lastpos(self, x : float, y : float) -> None:
     self.lastpos.x = x
     self.lastpos.y = y
     
-  def get_items_under_mouse(self, coords : Coords):
-    items_under = []
+  def get_items_under_mouse(self, coords : geom.Coords) -> List[Tuple[obsobj.OBS_Object, obsobj.ModifyType]]:
+    items_under : List[Tuple[obsobj.OBS_Object, obsobj.ModifyType]] = []
     
     for item in self.scene_items:
       manip_mode = item.move_or_resize(coords)
-      if manip_mode != ModifyType.NONE:
+      if manip_mode != obsobj.ModifyType.NONE:
         items_under.append((item, manip_mode))
         
     return items_under
 
-  def mouseDown(self, event):
+  def mouseDown(self, event : tk.Event) -> None:
     self.update_lastpos(event.x, event.y)
+    
+    self.xpull = 0
+    self.ypull = 0
     
     items_under = self.get_items_under_mouse(self.lastpos)
     
@@ -229,7 +239,7 @@ class OBS_WS_GUI:
       items_under[0][0].set_selected(True)
       items_under[0][0].setup_modify_ui(self)
           
-  def doubleClick(self, event):
+  def doubleClick(self, event : tk.Event) -> None:
     self.update_lastpos(event.x, event.y)
     
     scene_coords = self.canvas_to_scene(self.lastpos)
@@ -265,23 +275,65 @@ class OBS_WS_GUI:
       items_under[0][0].set_selected(True)
       items_under[0][0].setup_modify_ui(self)
 
-  def mouseMove(self, event):
+  def mouseMove(self, event : tk.Event) -> None:
     diffX = round((event.x - self.lastpos.x) / self.screen.scale)
     diffY = round((event.y - self.lastpos.y) / self.screen.scale)
     for item in self.scene_items:
       if item.selected:
-        if self.manip_mode == ModifyType.MOVE:
-          x = item.x + diffX
-          y = item.y + diffY
-          item.set_transform(x = x, y = y)
-        elif self.manip_mode == ModifyType.ROTATE:
-          center = item.polygon.centroid()
-          v1 = self.lastpos - center
-          v2 = Coords(event.x, event.y) - center
+        x = item.x
+        y = item.y
+        w = item.width
+        h = item.height
+        r = item.rotation
+        
+        if self.manip_mode == obsobj.ModifyType.MOVE:
+          x += diffX
+          y += diffY
           
-          a1 = v1.angle()
-          a2 = v2.angle()
-          adelta = a2 - a1
+          dist_from_right_edge = self.screen.width - (x + w)
+          dist_from_bottom_edge = self.screen.height - (y + h)
+              
+          if abs(x) < self.edge_groove:
+            if abs(self.xpull) < (2.0 * self.edge_groove):
+              self.xpull += x
+              x = 0
+            else:
+              x = self.xpull
+              self.xpull = 0
+          elif abs(dist_from_right_edge) < self.edge_groove:
+            if abs(self.xpull) < (2.0 * self.edge_groove):
+              self.xpull += dist_from_right_edge
+              x = self.screen.width - w
+            else:
+              x = self.screen.width - w - self.xpull
+              self.xpull = 0
+              
+          if abs(y) < self.edge_groove:
+            if abs(self.ypull) < (2.0 * self.edge_groove):
+              self.ypull += y
+              y = 0
+            else:
+              y = self.ypull
+              self.ypull = 0
+          elif abs(dist_from_bottom_edge) < self.edge_groove:
+            if abs(self.ypull) < (2.0 * self.edge_groove):
+              self.ypull += dist_from_bottom_edge
+              y = self.screen.height - h
+            else:
+              y = self.screen.height - h - self.ypull
+              self.ypull = 0
+          
+        elif self.manip_mode == obsobj.ModifyType.ROTATE:
+          center = item.polygon.centroid()
+          v2 = geom.Coords(event.x, event.y) - center
+          
+          new_angle = v2.angle() + (math.pi / 2)
+                 
+          for i in range(8):
+            if abs((i * math.pi / 4) - new_angle) < (0.5 * self.rotation_groove * math.pi / 180.0):
+              new_angle = i * math.pi / 4
+          
+          adelta = new_angle - r
           
           normalized_center = (center - item.polygon.point(0)) / self.screen.scale
           
@@ -290,61 +342,54 @@ class OBS_WS_GUI:
           
           displacement = rotated_center - normalized_center
           
-          new_rot = item.rotation + adelta
-          new_x = item.x - displacement.x
-          new_y = item.y - displacement.y
-          
-          item.set_transform(x = new_x, y = new_y, rot = new_rot)
+          x -= displacement.x
+          y -= displacement.y
+          r  = new_angle
         else:
-          x = item.x
-          y = item.y
-          w = item.width
-          h = item.height
-          
-          moveangle = Coords(diffX, diffY).angle()
+          moveangle = geom.Coords(diffX, diffY).angle()
           aprime = moveangle - item.rotation
           movedist = math.sqrt(math.pow(diffX, 2) + math.pow(diffY, 2))
           rotatedX = movedist * math.cos(aprime)
           rotatedY = movedist * math.sin(aprime)
           
-          if (self.manip_mode & ModifyType.LEFT != 0):
+          if (self.manip_mode & obsobj.ModifyType.LEFT != 0):
             corrX = rotatedX * math.cos(item.rotation)
             corrY = rotatedX * math.sin(item.rotation)
             x += corrX
             y += corrY
           
-          if (self.manip_mode & ModifyType.TOP != 0):
+          if (self.manip_mode & obsobj.ModifyType.TOP != 0):
             corrX = rotatedY * math.cos((math.pi / 2) - item.rotation)
             corrY = rotatedY * math.sin((math.pi / 2) - item.rotation)
             x -= corrX
             y += corrY
           
-          if self.manip_mode & ModifyType.LEFT != 0:
+          if self.manip_mode & obsobj.ModifyType.LEFT != 0:
             w -= rotatedX
-          if self.manip_mode & ModifyType.RIGHT != 0:
+          if self.manip_mode & obsobj.ModifyType.RIGHT != 0:
             w += rotatedX
-          if self.manip_mode & ModifyType.TOP != 0:
+          if self.manip_mode & obsobj.ModifyType.TOP != 0:
             h -= rotatedY
-          if self.manip_mode & ModifyType.BOTTOM != 0:
+          if self.manip_mode & obsobj.ModifyType.BOTTOM != 0:
             h += rotatedY
             
-          item.set_transform(x, y, w, h)
+        item.set_transform(x, y, w, h, r)
         
     self.update_lastpos(event.x, event.y)
     
-  def mouseUp(self, event):
+  def mouseUp(self, event : tk.Event) -> None:
     return
   
-  def get_selected_item(self):
+  def get_selected_item(self) -> obsobj.OBS_Object:
     for item in self.scene_items:
       if item.selected:
         return item
     return None
       
-  def clear_canvas(self):
+  def clear_canvas(self) -> None:
     self.canvas.delete("all")
     
-  def canvas_configure(self, event = None):
+  def canvas_configure(self, event : tk.Event = None) -> None:
     if self.canvas:
       if self.screen:
         self.screen.canvas_configure(event)
@@ -352,7 +397,7 @@ class OBS_WS_GUI:
       for item in self.scene_items:
         item.canvas_configure(event)
         
-  def queue_set_item_transform(self, item : OBS_Object):
+  def queue_set_item_transform(self, item : obsobj.OBS_Object) -> None:
     scale_x = 1.0 if item.source_width == 0.0 else item.width / item.source_width
     scale_y = 1.0 if item.source_height == 0.0 else item.height / item.source_height
     rot = (180.0 * item.rotation / math.pi) % 360.0
@@ -363,18 +408,18 @@ class OBS_WS_GUI:
       
     self.requests_queue.append(tf_req)
     
-  def setup_default_ui(self):
+  def setup_default_ui(self) -> None:
     self.defaultframe = ttk.Frame(self.root, padding = "5 5 5 5")
-    self.defaultframe.pack(anchor = CENTER, fill = BOTH, expand = True)
+    self.defaultframe.pack(anchor = tk.CENTER, fill = tk.BOTH, expand = True)
     self.defaultframe.columnconfigure(0, minsize=150)
     self.defaultframe.columnconfigure(1, weight = 1)
     self.defaultframe.rowconfigure(0, weight=1)
     
     self.modifyframe = ttk.Frame(self.defaultframe, padding="0 0 5 5")
-    self.modifyframe.grid(column = 0, row = 0, sticky = (N, W, E, S))
+    self.modifyframe.grid(column = 0, row = 0, sticky = (tk.N, tk.W, tk.E, tk.S))
     
-    self.canvas = Canvas(self.defaultframe, background = self.background_light, bd = 0, highlightthickness = 0, relief = 'ridge')
-    self.canvas.grid(column = 1, row = 0, sticky = (N, W, E, S), padx = (5, 0), pady = (0, 5))
+    self.canvas = tk.Canvas(self.defaultframe, background = self.background_light, bd = 0, highlightthickness = 0, relief = 'ridge')
+    self.canvas.grid(column = 1, row = 0, sticky = (tk.N, tk.W, tk.E, tk.S), padx = (5, 0), pady = (0, 5))
         
     self.canvas.bind("<Configure>", self.canvas_configure)
     self.canvas.bind("<Button-1>", self.mouseDown)
@@ -383,71 +428,71 @@ class OBS_WS_GUI:
     self.canvas.bind("<B1-Motion>", self.mouseMove)
     
     self.addimage = ttk.Button(self.defaultframe, text = "+", command = self.setup_add_input_dialog, width = 14, style = "Large.TButton")
-    self.addimage.grid(column = 1, row = 1, sticky = W, padx = (5, 0))
+    self.addimage.grid(column = 1, row = 1, sticky = tk.W, padx = (5, 0))
     
-    self.screen = OutputBounds(self.canvas, anchor = CENTER, width = self.video_width, height = self.video_height, label = "Output")
+    self.screen = bounds.OutputBounds(self.canvas, anchor = tk.CENTER, width = self.output_width, height = self.output_height, label = "Output")
     
     self.canvas_configure()
     
-  def setup_add_image_dialog(self):
+  def setup_add_image_dialog(self) -> None:
     self.new_image_name_label = ttk.Label(self.add_input_settings_frame, text = "Input name", style = "Large.TLabel")
-    self.new_image_name_label.grid(column = 0, row = 0, sticky = W)
+    self.new_image_name_label.grid(column = 0, row = 0, sticky = tk.W)
     self.new_image_name_entry = ttk.Entry(self.add_input_settings_frame, textvariable = self.new_input_name_strvar, width = 48, **self.largefontopt)
-    self.new_image_name_entry.grid(column = 0, row = 1, sticky = W, pady = (0, 10))
+    self.new_image_name_entry.grid(column = 0, row = 1, sticky = tk.W, pady = (0, 10))
     
     self.new_image_url_label = ttk.Label(self.add_input_settings_frame, text = "Image URL (must be online)", style = "Large.TLabel")
-    self.new_image_url_label.grid(column = 0, row = 2, sticky = W)
+    self.new_image_url_label.grid(column = 0, row = 2, sticky = tk.W)
     self.new_image_url_entry = ttk.Entry(self.add_input_settings_frame, textvariable = self.new_image_url_strvar, width = 48, **self.largefontopt)
-    self.new_image_url_entry.grid(column = 0, row = 3, sticky = W, pady = (0, 10))
+    self.new_image_url_entry.grid(column = 0, row = 3, sticky = tk.W, pady = (0, 10))
     
     self.add_image_button_frame = ttk.Frame(self.add_input_settings_frame)
-    self.add_image_button_frame.grid(column = 0, row = 5, sticky=E)
+    self.add_image_button_frame.grid(column = 0, row = 5, sticky= tk.E)
     
-    def addimg():
+    def addimg() -> None:
       self.queue_add_image_req()
       self.close_add_input_dialog()
     
     self.new_image_submit = ttk.Button(self.add_image_button_frame, text = "Add", command = addimg, padding = "5 0 0 0", style = "Large.TButton")
-    self.new_image_submit.grid(column = 0, row = 0, sticky = E, padx = (5, 5))
+    self.new_image_submit.grid(column = 0, row = 0, sticky = tk.E, padx = (5, 5))
   
     self.new_image_cancel = ttk.Button(self.add_image_button_frame, text = "Cancel", command = self.close_add_input_dialog, style="Large.TButton")
-    self.new_image_cancel.grid(column = 1, row = 0, sticky = E, padx = (5, 5))
+    self.new_image_cancel.grid(column = 1, row = 0, sticky = tk.E, padx = (5, 5))
     
-  def setup_add_text_dialog(self):
+  def setup_add_text_dialog(self) -> None:
     self.new_text_name_label = ttk.Label(self.add_input_settings_frame, text = "Input name", style = "Large.TLabel")
-    self.new_text_name_label.grid(column = 0, row = 0, sticky = W)
+    self.new_text_name_label.grid(column = 0, row = 0, sticky = tk.W)
     self.new_text_name_entry = ttk.Entry(self.add_input_settings_frame, textvariable = self.new_input_name_strvar, width = 48, **self.largefontopt)
-    self.new_text_name_entry.grid(column = 0, row = 1, sticky = W, pady = (0, 10))
+    self.new_text_name_entry.grid(column = 0, row = 1, sticky = tk.W, pady = (0, 10))
     
     self.new_text_url_label = ttk.Label(self.add_input_settings_frame, text = "Text", style = "Large.TLabel")
-    self.new_text_url_label.grid(column = 0, row = 2, sticky = W)
+    self.new_text_url_label.grid(column = 0, row = 2, sticky = tk.W)
     self.new_text_url_entry = ttk.Entry(self.add_input_settings_frame, textvariable = self.new_text_text_strvar, width = 48, **self.largefontopt)
-    self.new_text_url_entry.grid(column = 0, row = 3, sticky = W, pady = (0, 10))
+    self.new_text_url_entry.grid(column = 0, row = 3, sticky = tk.W, pady = (0, 10))
     
     self.add_text_button_frame = ttk.Frame(self.add_input_settings_frame)
-    self.add_text_button_frame.grid(column = 0, row = 5, sticky=E)
+    self.add_text_button_frame.grid(column = 0, row = 5, sticky = tk.E)
     
-    def addimg():
+    def addimg() -> None:
       self.queue_add_text_req()
       self.close_add_input_dialog()
     
     self.new_image_submit = ttk.Button(self.add_text_button_frame, text = "Add", command = addimg, padding = "5 0 0 0", style = "Large.TButton")
-    self.new_image_submit.grid(column = 0, row = 0, sticky = E, padx = (5, 5))
+    self.new_image_submit.grid(column = 0, row = 0, sticky = tk.E, padx = (5, 5))
   
     self.new_image_cancel = ttk.Button(self.add_text_button_frame, text = "Cancel", command = self.close_add_input_dialog, style="Large.TButton")
-    self.new_image_cancel.grid(column = 1, row = 0, sticky = E, padx = (5, 5))
+    self.new_image_cancel.grid(column = 1, row = 0, sticky = tk.E, padx = (5, 5))
     
-  def close_add_input_dialog(self):
+  def close_add_input_dialog(self) -> None:
     self.new_input_name_strvar.set("")
     self.new_image_url_strvar.set("")
     self.new_text_text_strvar.set("")
     self.add_input_dialog.destroy()
   
-  def setup_add_input_dialog(self):
+  def setup_add_input_dialog(self) -> None:
     x = self.root.winfo_x()
     y = self.root.winfo_y()
     
-    self.add_input_dialog = Toplevel(self.root, background = self.background_color)
+    self.add_input_dialog = tk.Toplevel(self.root, background = self.background_color)
     self.add_input_dialog.geometry(f"+{x + 10}+{y + 50}")
     self.add_input_dialog.minsize(200, 100)
     self.add_input_dialog.columnconfigure(0, weight = 1)
@@ -455,21 +500,21 @@ class OBS_WS_GUI:
     self.add_input_dialog.protocol("WM_DELETE_WINDOW", self.close_add_input_dialog)
     
     self.add_input_type_frame = ttk.Frame(self.add_input_dialog, padding = "5 5 5 5")
-    self.add_input_type_frame.grid(column = 0, row = 0, sticky = (N, W, E, S))
+    self.add_input_type_frame.grid(column = 0, row = 0, sticky = (tk.N, tk.W, tk.E, tk.S))
     self.add_input_type_frame.grid_columnconfigure(0, weight = 1)
     
     self.add_input_type_label = ttk.Label(self.add_input_type_frame, text = "Input type", style = "Large.TLabel")
-    self.add_input_type_label.grid(column = 0, row = 0, sticky = W)
+    self.add_input_type_label.grid(column = 0, row = 0, sticky = tk.W)
     self.add_input_type_select = ttk.OptionMenu(self.add_input_type_frame, self.new_input_type_strvar, self.input_types[0], *self.input_types, command = self.new_input_type_change, style = "Large.TMenubutton")
-    self.add_input_type_select.grid(column = 0, row = 1, sticky = (W, E))
+    self.add_input_type_select.grid(column = 0, row = 1, sticky = (tk.W, tk.E))
     
     self.add_input_settings_frame = ttk.Frame(self.add_input_dialog, padding = "5 5 5 5")
-    self.add_input_settings_frame.grid(column = 0, row = 1, sticky = (N, W, E, S))
+    self.add_input_settings_frame.grid(column = 0, row = 1, sticky = (tk.N, tk.W, tk.E, tk.S))
     self.add_input_settings_frame.grid_columnconfigure(0, weight = 1)
     
     self.new_input_type_change()
     
-  def new_input_type_change(self, *args):
+  def new_input_type_change(self, *args) -> None:
     inputtype = self.new_input_type_strvar.get()
     
     # clear the input settings frame
@@ -481,7 +526,7 @@ class OBS_WS_GUI:
     elif inputtype == "text":
       self.setup_add_text_dialog()
     
-  def queue_add_image_req(self):
+  def queue_add_image_req(self) -> None:
     img_name = self.new_input_name_strvar.get()
     img_url  = self.new_image_url_strvar.get()
     
@@ -489,7 +534,7 @@ class OBS_WS_GUI:
       img_req  = simpleobsws.Request('CreateInput', { 'sceneName': self.current_scene, 'inputName': img_name, 'inputKind': 'image_source', 'inputSettings': { 'file': img_url }, 'sceneItemEnabled': True })
       self.requests_queue.append(img_req)
     
-  def queue_add_text_req(self):
+  def queue_add_text_req(self) -> None:
     input_name = self.new_input_name_strvar.get()
     input_text = self.new_text_text_strvar.get()
     input_kind = 'text_gdiplus_v2' if self.platform == "windows" else 'text_ft2_source_v2'
@@ -498,7 +543,7 @@ class OBS_WS_GUI:
       img_req  = simpleobsws.Request('CreateInput', { 'sceneName': self.current_scene, 'inputName': input_name, 'inputKind': input_kind, 'inputSettings': { 'text': input_text }, 'sceneItemEnabled': True })
       self.requests_queue.append(img_req)
   
-  def set_conn_ui_state(self, disabled : bool, submit_str : str):
+  def set_conn_ui_state(self, disabled : bool, submit_str : str) -> None:
     self.conn_submit_strvar.set(submit_str)
     state = 'disable' if disabled else 'enable'
     self.ip_addr_entry['state'] = state
@@ -506,16 +551,16 @@ class OBS_WS_GUI:
     self.pw_entry['state'] = state
     self.conn_submit['state'] = state
     
-  def start_connection_attempt(self):
+  def start_connection_attempt(self) -> None:
     self.set_conn_ui_state(True, "Attempting connection...")
     self.ready_to_connect = True
     
-  def clear_modify_ui(self):
+  def clear_modify_ui(self) -> None:
     if self.modifyframe:
       for item in self.modifyframe.winfo_children():
         item.destroy()
     
-  def update_modify_ui(self):
+  def update_modify_ui(self) -> None:
     selected_item = self.get_selected_item()
     if self.modifyframe and (not selected_item or (self.prev_selected_item != selected_item)):
       self.prev_selected_item = selected_item
@@ -560,8 +605,8 @@ class OBS_WS_GUI:
     if not screenw or not screenh:
       return False
     else:
-      self.video_width = screenw
-      self.video_height = screenh
+      self.output_width = screenw
+      self.output_height = screenh
       return True
   
   async def get_video_settings(self):
@@ -575,13 +620,13 @@ class OBS_WS_GUI:
   
     return ret.responseData["baseWidth"], ret.responseData["baseHeight"]
   
-  def find_scene_item(self, item_id):
+  def find_scene_item(self, item_id : int) -> obsobj.OBS_Object:
     for item in self.scene_items:
       if (item.scene_item_id == item_id):
         return item
     return None
   
-  async def get_image_for_item(self, item):
+  async def get_image_for_item(self, item : imgin.ImageInput) -> None:
     req = simpleobsws.Request('GetInputSettings', { 'inputName': item.source_name })
     ret = await self.ws.call(req)
     
@@ -591,7 +636,7 @@ class OBS_WS_GUI:
       url = ret.responseData['inputSettings']['file']
       item.set_image_url(url)
   
-  async def get_text_settings(self, item):
+  async def get_text_settings(self, item : textin.TextInput) -> None:
     req = simpleobsws.Request('GetInputSettings', { 'inputName': item.source_name })
     ret = await self.ws.call(req)
     
@@ -605,7 +650,7 @@ class OBS_WS_GUI:
         vertical = ret.responseData['inputSettings']['vertical']
         item.set_vertical(vertical)
   
-  async def get_scene_state(self):
+  async def get_scene_state(self) -> None:
     req = simpleobsws.Request('GetCurrentProgramScene')
     ret = await self.ws.call(req)
     
@@ -622,10 +667,10 @@ class OBS_WS_GUI:
     
     screenw, screenh = await self.get_video_settings()
     if screenw and screenh:
-      if self.video_height != screenh or self.video_width != screenw:
-        self.video_width = screenw
-        self.video_height = screenh
-        self.screen.set_transform(w = self.video_width, h = self.video_height)
+      if self.output_height != screenh or self.output_width != screenw:
+        self.output_width = screenw
+        self.output_height = screenh
+        self.screen.set_transform(w = self.output_width, h = self.output_height)
         self.canvas_configure()
     
     req = simpleobsws.Request('GetSceneItemList', { 'sceneName' : self.current_scene })
@@ -683,13 +728,13 @@ class OBS_WS_GUI:
         
       else:
         if i['inputKind'] == 'image_source':
-          item = ImageInput(i['sceneItemId'], i['sceneItemIndex'], self.canvas, self.screen, x, y, w, h, a, sw, sh, tf['boundsType'], i['sourceName'])
+          item = imgin.ImageInput(i['sceneItemId'], i['sceneItemIndex'], self.canvas, self.screen, x, y, w, h, a, sw, sh, tf['boundsType'], i['sourceName'])
           await self.get_image_for_item(item)
         elif i['inputKind'] == 'text_gdiplus_v2' or i['inputKind'] == 'text_ft2_source_v2':
-          item = TextInput(i['sceneItemId'], i['sceneItemIndex'], self.canvas, self.screen, x, y, w, h, a, sw, sh, tf['boundsType'], i['sourceName'])
+          item = textin.TextInput(i['sceneItemId'], i['sceneItemIndex'], self.canvas, self.screen, x, y, w, h, a, sw, sh, tf['boundsType'], i['sourceName'])
           await self.get_text_settings(item)
         else:
-          item = OBS_Object(i['sceneItemId'], i['sceneItemIndex'], self.canvas, self.screen, x, y, w, h, a, sw, sh, tf['boundsType'], i['sourceName'])
+          item = obsobj.OBS_Object(i['sceneItemId'], i['sceneItemIndex'], self.canvas, self.screen, x, y, w, h, a, sw, sh, tf['boundsType'], i['sourceName'])
           item.set_interactable(False)
           
         self.scene_items.append(item)
@@ -700,7 +745,7 @@ class OBS_WS_GUI:
     for i in range(1, len(self.scene_items)):
       self.scene_items[i - 1].move_to_front(self.scene_items[i].item_label_id)
       
-  def queue_item_transform_requests(self):
+  def queue_item_transform_requests(self) -> None:
     for item in self.scene_items:
       if item.changed:
         self.queue_set_item_transform(item)
@@ -715,7 +760,7 @@ class OBS_WS_GUI:
         
     self.requests_queue.clear()
     
-  def log_request_error(self, ret):
+  def log_request_error(self, ret : simpleobsws.RequestResponse) -> None:
     try:
       logging.error(f"Error {ret.requestStatus['code']}: {ret.requestStatus['comment']}")
     except:

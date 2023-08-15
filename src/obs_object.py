@@ -1,12 +1,12 @@
-import math
 import enum
-from tkinter import *
+import math
+import tkinter as tk
 from tkinter import ttk
+from typing import List, Tuple
 
 import simpleobsws
 
-from geometryutil import *
-
+import geometryutil as geom
 
 class InputKind(enum.Enum):
   IMAGE_SOURCE = 'image_source'
@@ -45,49 +45,51 @@ def flatten(l : list):
   return [item for sublist in l for item in sublist]
 
 class OBS_Object:
-  x = 0.0
-  y = 0.0
-  width = 0.0
-  height = 0.0
-  rotation = 0.0 # in radians
-  source_width = 0.0
-  source_height = 0.0
-  selected = False
+  x             : float = 0.0
+  y             : float = 0.0
+  width         : float = 0.0
+  height        : float = 0.0
+  rotation      : float = 0.0 # in radians
+  source_width  : float = 0.0
+  source_height : float = 0.0
   
-  polygon = Polygon()
-  wpx = 0
-  hpx = 0
+  selected : bool = False
   
-  source_name = ""
-  scene_item_id = 0
-  scene_item_index = 0
-  bounds_type = ""
+  polygon : geom.Polygon = geom.Polygon()
   
-  scale = 1.0
+  wpx : float = 0.0
+  hpx : float = 0.0
   
-  screen = None
-  canvas = None
+  source_name      : str = ""
+  scene_item_id    : int= 0
+  scene_item_index : int = 0
+  bounds_type      : str = ""
   
-  rect_id = None
-  item_label_id = None
-  grabber_ids = None
-  rotator_grabber_id = None
-  rotator_line_id = None
+  scale : float = 1.0
   
-  rotator_dist = 40
-  rotator_grabber_pos : Coords = Coords()
+  screen : 'OBS_Object' = None
+  canvas : tk.Canvas                 = None
   
-  line_width = 4
-  grabber_radius = 8
+  rect_id            : int       = None
+  item_label_id      : int       = None
+  rotator_grabber_id : int       = None
+  rotator_line_id    : int       = None
+  grabber_ids        : List[int] = None
   
-  interactable = True
+  rotator_dist : float = 40
+  rotator_grabber_pos : geom.Coords = geom.Coords()
   
-  default_color  = "#efeff1"
-  selected_color = "#fab4ff"
+  line_width : float = 4
+  grabber_radius : float = 8
   
-  changed = False
+  interactable : bool = True
   
-  def __init__(self, scene_item_id : int, scene_item_index : int, canvas : Canvas, screen, x : float, y : float, width : float, height : float, rotation : float, source_width : float, source_height : float, bounds_type : str, label : str = "", interactable : bool = True):
+  default_color  : str = "#efeff1"
+  selected_color : str = "#fab4ff"
+  
+  changed : bool = False
+  
+  def __init__(self, scene_item_id : int, scene_item_index : int, canvas : tk.Canvas, screen, x : float, y : float, width : float, height : float, rotation : float, source_width : float, source_height : float, bounds_type : str, label : str = "", interactable : bool = True):
     self.scene_item_id = scene_item_id
     self.scene_item_index = scene_item_index
     self.canvas = canvas
@@ -103,7 +105,7 @@ class OBS_Object:
     self.source_name = label
     self.interactable = interactable
     
-    self.polygon = Polygon([0, 0], [0, 0], [0, 0], [0, 0])
+    self.polygon = geom.Polygon([0, 0], [0, 0], [0, 0], [0, 0])
     
     self.rect_id = self.canvas.create_polygon(self.polygon.to_array(), width = self.line_width, outline = self.default_color, fill = '')
     
@@ -118,11 +120,11 @@ class OBS_Object:
       self.rotator_grabber_id = self.canvas.create_oval(0, 0, 0, 0, width = self.line_width, outline = "", fill = self.default_color)
       self.rotator_line_id    = self.canvas.create_line(0, 0, 0, 0, width = self.line_width, fill = self.default_color)
     
-    self.item_label_id = self.canvas.create_text(0, 0, anchor = SW, text = f"{self.source_name} ({self.scene_item_id})", fill = self.default_color, angle = 0)
+    self.item_label_id = self.canvas.create_text(0, 0, anchor = tk.SW, text = f"{self.source_name} ({self.scene_item_id})", fill = self.default_color, angle = 0)
     
     self.redraw()
     
-  def remove_from_canvas(self):
+  def remove_from_canvas(self) -> None:
     if self.rect_id:
       self.canvas.delete(self.rect_id)
     if self.grabber_ids:
@@ -131,7 +133,7 @@ class OBS_Object:
     if self.item_label_id:
       self.canvas.delete(self.item_label_id)
       
-  def calculate_canvas_pos(self):
+  def calculate_canvas_pos(self) -> None:
     self.scale = self.screen.scale
     
     screenx = self.screen.polygon.point(0).x
@@ -143,7 +145,7 @@ class OBS_Object:
     self.hpx = self.height * self.scale
     
     diag_length = math.sqrt(math.pow(self.wpx, 2) + math.pow(self.hpx, 2))
-    rect_angle = Coords(self.wpx, self.hpx).angle()
+    rect_angle = geom.Coords(self.wpx, self.hpx).angle()
     
     self.polygon.point(1).x = self.polygon.point(0).x + self.wpx * math.cos(self.rotation)
     self.polygon.point(1).y = self.polygon.point(0).y + self.wpx * math.sin(self.rotation)
@@ -183,7 +185,7 @@ class OBS_Object:
       self.changed |= local
       self.redraw()
       
-  def set_selected(self, selected):
+  def set_selected(self, selected : bool) -> None:
     if self.selected != selected:
       self.selected = selected
       
@@ -195,7 +197,7 @@ class OBS_Object:
       self.canvas.itemconfigure(self.rotator_grabber_id, fill = c)
       self.canvas.itemconfigure(self.rotator_line_id, fill = c)
     
-  def set_interactable(self, interactable):
+  def set_interactable(self, interactable : bool) -> None:
     if self.interactable != interactable:
       self.interactable = interactable
       
@@ -212,7 +214,7 @@ class OBS_Object:
         top_middle = (self.polygon.point(0) + self.polygon.point(1)) / 2.0
         rpx = self.get_rotatordist()
         
-        inter_pos = Coords(0, math.copysign(rpx, self.hpx))
+        inter_pos = geom.Coords(0, math.copysign(rpx, self.hpx))
         inter_pos.rotate(self.rotation)
         self.rotator_grabber_pos = top_middle - inter_pos
         
@@ -228,16 +230,16 @@ class OBS_Object:
         self.rotator_grabber_id = None
         self.rotator_line_id = None
     
-  def set_source_name(self, source_name):
+  def set_source_name(self, source_name : str) -> None:
     if self.source_name != source_name:
       self.source_name = source_name
       self.canvas.itemconfigure(self.item_label_id, text = f"{self.source_name} ({self.scene_item_id})")
       
-  def canvas_configure(self, event = None):
+  def canvas_configure(self, event : tk.Event = None) -> None:
     self.scale = self.screen.scale
     self.redraw()
       
-  def redraw(self):
+  def redraw(self) -> None:
     self.calculate_canvas_pos()
     gpx = self.get_grabberradius()
     lw = self.get_linewidth()
@@ -255,7 +257,7 @@ class OBS_Object:
       top_middle = (self.polygon.point(0) + self.polygon.point(1)) / 2.0
       rpx = self.get_rotatordist()
       
-      inter_pos = Coords(0, math.copysign(rpx, self.hpx))
+      inter_pos = geom.Coords(0, math.copysign(rpx, self.hpx))
       inter_pos.rotate(self.rotation)
       self.rotator_grabber_pos = top_middle - inter_pos
       
@@ -268,10 +270,10 @@ class OBS_Object:
     
     self.canvas.itemconfig(self.item_label_id, angle = textangle)
     
-  def contains(self, coords : Coords):
-    return point_in_polygon(self.polygon, coords)
+  def contains(self, coords : geom.Coords) -> bool:
+    return geom.point_in_polygon(self.polygon, coords)
   
-  def move_or_resize(self, coords : Coords, zone : int = 10) -> int:
+  def move_or_resize(self, coords : geom.Coords, zone : int = 10) -> int:
     if not self.interactable:
       return ModifyType.NONE
     
@@ -292,10 +294,10 @@ class OBS_Object:
       or coords.y > maxy + zone:
         return ModifyType.NONE
     
-    leftside   = distance_from_segment(self.polygon.point(0), self.polygon.point(3), coords) < zone
-    rightside  = distance_from_segment(self.polygon.point(1), self.polygon.point(2), coords) < zone
-    topside    = distance_from_segment(self.polygon.point(0), self.polygon.point(1), coords) < zone
-    bottomside = distance_from_segment(self.polygon.point(2), self.polygon.point(3), coords) < zone
+    leftside   = geom.distance_from_segment(self.polygon.point(0), self.polygon.point(3), coords) < zone
+    rightside  = geom.distance_from_segment(self.polygon.point(1), self.polygon.point(2), coords) < zone
+    topside    = geom.distance_from_segment(self.polygon.point(0), self.polygon.point(1), coords) < zone
+    bottomside = geom.distance_from_segment(self.polygon.point(2), self.polygon.point(3), coords) < zone
     
     ret = ModifyType.NONE
     if leftside:
@@ -307,14 +309,14 @@ class OBS_Object:
     if bottomside:
       ret |= ModifyType.BOTTOM
     if ret == 0:
-      if point_in_polygon(self.polygon, coords):
+      if geom.point_in_polygon(self.polygon, coords):
         ret = ModifyType.MOVE
-      elif distance(self.rotator_grabber_pos, coords) < zone:
+      elif geom.distance(self.rotator_grabber_pos, coords) < zone:
         ret = ModifyType.ROTATE
       
     return ret
   
-  def move_to_front(self, under = None):
+  def move_to_front(self, under : 'OBS_Object' = None) -> None:
     if self.rect_id:
       if under:
         self.canvas.tag_raise(self.rect_id, under)
@@ -326,19 +328,19 @@ class OBS_Object:
     if self.item_label_id:
       self.canvas.tag_raise(self.item_label_id, self.rect_id if not self.grabber_ids else self.grabber_ids[0])
       
-  def setup_modify_ui(self, gui):
+  def setup_modify_ui(self, gui : 'owg.OBS_WS_GUI') -> None:
     return None
     
-  def queue_move_to_front(self, gui):
+  def queue_move_to_front(self, gui : 'owg.OBS_WS_GUI'):
     index_req = simpleobsws.Request('SetSceneItemIndex', { 'sceneName': gui.current_scene, 'sceneItemId': self.scene_item_id, 'sceneItemIndex': gui.scene_items[0].scene_item_index})
     gui.requests_queue.append(index_req)
     
-  def queue_duplicate_req(self, gui):
+  def queue_duplicate_req(self, gui : 'owg.OBS_WS_GUI'):
     img_req = simpleobsws.Request('DuplicateSceneItem', { 'sceneName': gui.current_scene, 'sceneItemId': self.scene_item_id})
     gui.requests_queue.append(img_req)
     
-  def setup_duplicate_dialog(self, gui):
-    self.dup_image_dialog = Toplevel(gui.root)
+  def setup_duplicate_dialog(self, gui : 'owg.OBS_WS_GUI') -> None:
+    self.dup_image_dialog = tk.Toplevel(gui.root)
     x = gui.root.winfo_x()
     y = gui.root.winfo_y()
     self.dup_image_dialog.geometry(f"+{x + 200}+{y + 200}")
@@ -346,28 +348,28 @@ class OBS_Object:
     self.dup_image_dialog.protocol("WM_DELETE_WINDOW", self.dup_image_dialog.destroy)
     
     self.dup_image_frame = ttk.Frame(self.dup_image_dialog, padding = "12 12 12 12")
-    self.dup_image_frame.grid(column = 0, row = 0, sticky = (N, W, E, S))
+    self.dup_image_frame.grid(column = 0, row = 0, sticky = (tk.N, tk.W, tk.E, tk.S))
     self.dup_image_frame.grid_columnconfigure(0, weight = 1)
     
     self.dup_image_name_label = ttk.Label(self.dup_image_frame, text = f"Duplicate \"{self.source_name} ({self.scene_item_id})\"?")
-    self.dup_image_name_label.grid(column = 0, columnspan = 2, row = 0, sticky = (W, E))
+    self.dup_image_name_label.grid(column = 0, columnspan = 2, row = 0, sticky = (tk.W, tk.E))
     
     def dup():
       self.queue_duplicate_req(gui)
       self.dup_image_dialog.destroy()
       
     self.dup_image_submit = ttk.Button(self.dup_image_frame, text = "Yes", command = dup)
-    self.dup_image_submit.grid(column = 0, row = 1, sticky = (W, E))
+    self.dup_image_submit.grid(column = 0, row = 1, sticky = (tk.W, tk.E))
   
     self.dup_image_cancel = ttk.Button(self.dup_image_frame, text = "No", command = self.dup_image_dialog.destroy)
-    self.dup_image_cancel.grid(column = 1, row = 1, sticky = (W, E))
+    self.dup_image_cancel.grid(column = 1, row = 1, sticky = (tk.W, tk.E))
     
-  def queue_delete_req(self, gui):
+  def queue_delete_req(self, gui : 'owg.OBS_WS_GUI') -> None:
     del_req = simpleobsws.Request('RemoveSceneItem', { 'sceneName': gui.current_scene, 'sceneItemId': self.scene_item_id })
     gui.requests_queue.append(del_req)
     
-  def setup_delete_dialog(self, gui):
-    self.del_image_dialog = Toplevel(gui.root)
+  def setup_delete_dialog(self, gui : 'owg.OBS_WS_GUI') -> None:
+    self.del_image_dialog = tk.Toplevel(gui.root)
     x = gui.root.winfo_x()
     y = gui.root.winfo_y()
     self.del_image_dialog.geometry(f"+{x + 200}+{y + 200}")
@@ -375,30 +377,30 @@ class OBS_Object:
     self.del_image_dialog.protocol("WM_DELETE_WINDOW", self.del_image_dialog.destroy)
     
     self.del_image_frame = ttk.Frame(self.del_image_dialog, padding = "12 12 12 12")
-    self.del_image_frame.grid(column = 0, row = 0, sticky = (N, W, E, S))
+    self.del_image_frame.grid(column = 0, row = 0, sticky = (tk.N, tk.W, tk.E, tk.S))
     self.del_image_frame.grid_columnconfigure(0, weight = 1)
     
     self.del_image_prompt = ttk.Label(self.del_image_frame, text = f"Are you sure you want to delete \"{self.source_name} ({self.scene_item_id})\"?")
-    self.del_image_prompt.grid(column = 0, columnspan = 2, row = 0, sticky = (W, E))
+    self.del_image_prompt.grid(column = 0, columnspan = 2, row = 0, sticky = (tk.W, tk.E))
     
     def delimg():
       self.queue_delete_req(gui)
       self.del_image_dialog.destroy()
     
     self.del_image_submit = ttk.Button(self.del_image_frame, text = "Yes", command = delimg)
-    self.del_image_submit.grid(column = 0, row = 1, sticky = E)
+    self.del_image_submit.grid(column = 0, row = 1, sticky = tk.E)
     self.del_image_cancel = ttk.Button(self.del_image_frame, text = "No", command = self.del_image_dialog.destroy)
-    self.del_image_cancel.grid(column = 1, row = 1, sticky = E)
+    self.del_image_cancel.grid(column = 1, row = 1, sticky = tk.E)
     
-  def queue_update_req(self, gui):
+  def queue_update_req(self, gui : 'owg.OBS_WS_GUI') -> None:
     newname = self.modify_name_strvar.get()
       
     if newname != self.source_name:
       namereq = simpleobsws.Request('SetInputName', { 'inputName': self.source_name, 'newInputName': newname})
       gui.requests_queue.append(namereq)
     
-  def setup_update_dialog(self, gui):
-    self.update_image_dialog = Toplevel(gui.root)
+  def setup_update_dialog(self, gui : 'owg.OBS_WS_GUI') -> None:
+    self.update_image_dialog = tk.Toplevel(gui.root)
     x = gui.root.winfo_x()
     y = gui.root.winfo_y()
     self.update_image_dialog.geometry(f"+{x + 200}+{y + 200}")
@@ -406,19 +408,24 @@ class OBS_Object:
     self.update_image_dialog.protocol("WM_DELETE_WINDOW", self.update_image_dialog.destroy)
     
     self.update_image_frame = ttk.Frame(self.update_image_dialog, padding = "12 12 12 12")
-    self.update_image_frame.grid(column = 0, row = 0, sticky = (N, W, E, S))
+    self.update_image_frame.grid(column = 0, row = 0, sticky = (tk.N, tk.W, tk.E, tk.S))
     
     self.update_image_name_label = ttk.Label(self.update_image_frame, text = f"Update name and settings for \"{self.source_name} ({self.scene_item_id})\"?")
-    self.update_image_name_label.grid(column = 0, columnspan = 2, row = 0, sticky = (W, E))
+    self.update_image_name_label.grid(column = 0, columnspan = 2, row = 0, sticky = (tk.W, tk.E))
     self.update_image_warn_label = ttk.Label(self.update_image_frame, text = f"(this will affect all inputs with the same name)")
-    self.update_image_warn_label.grid(column = 0, columnspan = 2, row = 1, sticky = (W, E))
+    self.update_image_warn_label.grid(column = 0, columnspan = 2, row = 1, sticky = (tk.W, tk.E))
     
     def updatefunc():
       self.queue_update_req(gui)
       self.update_image_dialog.destroy()
       
     self.update_image_submit = ttk.Button(self.update_image_frame, text = "Yes", command = updatefunc)
-    self.update_image_submit.grid(column = 0, row = 2, sticky = (W, E))
+    self.update_image_submit.grid(column = 0, row = 2, sticky = (tk.W, tk.E))
   
     self.update_image_cancel = ttk.Button(self.update_image_frame, text = "No", command = self.update_image_dialog.destroy)
-    self.update_image_cancel.grid(column = 1, row = 2, sticky = (W, E))
+    self.update_image_cancel.grid(column = 1, row = 2, sticky = (tk.W, tk.E))
+    
+  def setup_create_ui(self, gui : 'owg.OBS_WS_GUI') -> None:
+    None
+  
+import obswsgui as owg
