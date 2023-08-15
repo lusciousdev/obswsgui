@@ -124,6 +124,9 @@ class OBS_Object:
     
     self.redraw()
     
+  def update(self, qui : 'owg.OBS_WS_GUI') -> None:
+    None
+    
   def remove_from_canvas(self) -> None:
     if self.rect_id:
       self.canvas.delete(self.rect_id)
@@ -132,6 +135,10 @@ class OBS_Object:
         self.canvas.delete(id)
     if self.item_label_id:
       self.canvas.delete(self.item_label_id)
+    if self.rotator_grabber_id:
+      self.canvas.delete(self.rotator_grabber_id)
+    if self.rotator_line_id:
+      self.canvas.delete(self.rotator_line_id)
       
   def calculate_canvas_pos(self) -> None:
     self.scale = self.screen.scale
@@ -329,7 +336,7 @@ class OBS_Object:
       self.canvas.tag_raise(self.item_label_id, self.rect_id if not self.grabber_ids else self.grabber_ids[0])
       
   def setup_modify_ui(self, gui : 'owg.OBS_WS_GUI') -> None:
-    return None
+    None
     
   def queue_move_to_front(self, gui : 'owg.OBS_WS_GUI'):
     index_req = simpleobsws.Request('SetSceneItemIndex', { 'sceneName': gui.current_scene, 'sceneItemId': self.scene_item_id, 'sceneItemIndex': gui.scene_items[0].scene_item_index})
@@ -392,12 +399,15 @@ class OBS_Object:
     self.del_image_cancel = ttk.Button(self.del_image_frame, text = "No", command = self.del_image_dialog.destroy)
     self.del_image_cancel.grid(column = 1, row = 1, sticky = tk.E)
     
+  def update_source_name(self, gui : 'owg.OBS_WS_GUI', new_source_name : str) -> None:
+    namereq = simpleobsws.Request('SetInputName', { 'inputName': self.source_name, 'newInputName': new_source_name})
+    gui.requests_queue.append(namereq)
+    
   def queue_update_req(self, gui : 'owg.OBS_WS_GUI') -> None:
     newname = self.modify_name_strvar.get()
       
     if newname != self.source_name:
-      namereq = simpleobsws.Request('SetInputName', { 'inputName': self.source_name, 'newInputName': newname})
-      gui.requests_queue.append(namereq)
+      self.update_source_name(gui, newname)
     
   def setup_update_dialog(self, gui : 'owg.OBS_WS_GUI') -> None:
     self.update_image_dialog = tk.Toplevel(gui.root)

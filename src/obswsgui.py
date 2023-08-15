@@ -3,19 +3,21 @@ import logging
 logging.basicConfig(level = logging.INFO)
 
 import asyncio
-import time
+import datetime as dt
 import math
+import time
 import tkinter as tk
 from tkinter import font, ttk
 from typing import List, Tuple
 
 import simpleobsws
 
+import geometryutil as geom
 import imageinput as imgin
 import obs_object as obsobj
 import outputbounds as bounds
 import textinput as textin
-import geometryutil as geom
+
 
 class OBS_WS_GUI:
   ready_to_connect : bool = False
@@ -55,7 +57,7 @@ class OBS_WS_GUI:
   
   style : ttk.Style = None
   
-  input_types : List[str] = ["image", "text"]
+  input_types : List[str] = ["image", "text", "countdown"]
   
   rotation_groove : float = 8.0 # degrees
   edge_groove     : float = 8.0 # pixels
@@ -79,8 +81,9 @@ class OBS_WS_GUI:
     self.new_input_type_strvar = tk.StringVar(self.root, "image")
     self.new_input_name_strvar = tk.StringVar(self.root, "")
     
-    self.new_image_url_strvar = tk.StringVar(self.root, "")
-    self.new_text_text_strvar = tk.StringVar(self.root, "")
+    self.new_image_url_strvar     = tk.StringVar(self.root, "")
+    self.new_text_text_strvar     = tk.StringVar(self.root, "")
+    self.new_countdown_end_strvar = tk.StringVar(self.root, "")
     
     self.style = ttk.Style(self.root)
     self.style.theme_create("obswsgui", parent = "alt", settings = {
@@ -139,12 +142,17 @@ class OBS_WS_GUI:
       start = time.time()
       
       self.update_modify_ui()
+      self.update_items()
       self.queue_item_transform_requests()
       loop.run_until_complete(self.async_update())
       
       waittime = (1.0 / self.framerate) - (time.time() - start)
       if waittime > 0:
         time.sleep(waittime)
+        
+  def update_items(self) -> None:
+    for item in self.scene_items:
+      item.update(self)
     
   async def async_update(self):
     if not self.connected and self.ready_to_connect:
@@ -435,57 +443,82 @@ class OBS_WS_GUI:
     self.canvas_configure()
     
   def setup_add_image_dialog(self) -> None:
-    self.new_image_name_label = ttk.Label(self.add_input_settings_frame, text = "Input name", style = "Large.TLabel")
-    self.new_image_name_label.grid(column = 0, row = 0, sticky = tk.W)
-    self.new_image_name_entry = ttk.Entry(self.add_input_settings_frame, textvariable = self.new_input_name_strvar, width = 48, **self.largefontopt)
-    self.new_image_name_entry.grid(column = 0, row = 1, sticky = tk.W, pady = (0, 10))
+    self.new_input_name_label = ttk.Label(self.add_input_settings_frame, text = "Input name", style = "Large.TLabel")
+    self.new_input_name_label.grid(column = 0, row = 0, sticky = tk.W)
+    self.new_input_name_entry = ttk.Entry(self.add_input_settings_frame, textvariable = self.new_input_name_strvar, width = 48, **self.largefontopt)
+    self.new_input_name_entry.grid(column = 0, row = 1, sticky = tk.W, pady = (0, 10))
     
     self.new_image_url_label = ttk.Label(self.add_input_settings_frame, text = "Image URL (must be online)", style = "Large.TLabel")
     self.new_image_url_label.grid(column = 0, row = 2, sticky = tk.W)
     self.new_image_url_entry = ttk.Entry(self.add_input_settings_frame, textvariable = self.new_image_url_strvar, width = 48, **self.largefontopt)
     self.new_image_url_entry.grid(column = 0, row = 3, sticky = tk.W, pady = (0, 10))
     
-    self.add_image_button_frame = ttk.Frame(self.add_input_settings_frame)
-    self.add_image_button_frame.grid(column = 0, row = 5, sticky= tk.E)
+    self.add_input_button_frame = ttk.Frame(self.add_input_settings_frame)
+    self.add_input_button_frame.grid(column = 0, row = 5, sticky= tk.E)
     
     def addimg() -> None:
       self.queue_add_image_req()
       self.close_add_input_dialog()
     
-    self.new_image_submit = ttk.Button(self.add_image_button_frame, text = "Add", command = addimg, padding = "5 0 0 0", style = "Large.TButton")
-    self.new_image_submit.grid(column = 0, row = 0, sticky = tk.E, padx = (5, 5))
-  
-    self.new_image_cancel = ttk.Button(self.add_image_button_frame, text = "Cancel", command = self.close_add_input_dialog, style="Large.TButton")
-    self.new_image_cancel.grid(column = 1, row = 0, sticky = tk.E, padx = (5, 5))
+    self.new_input_submit = ttk.Button(self.add_input_button_frame, text = "Add", command = addimg, padding = "5 0 0 0", style = "Large.TButton")
+    self.new_input_submit.grid(column = 0, row = 0, sticky = tk.E, padx = (5, 5))
+    
+    self.new_input_cancel = ttk.Button(self.add_input_button_frame, text = "Cancel", command = self.close_add_input_dialog, style="Large.TButton")
+    self.new_input_cancel.grid(column = 1, row = 0, sticky = tk.E, padx = (5, 5))
     
   def setup_add_text_dialog(self) -> None:
-    self.new_text_name_label = ttk.Label(self.add_input_settings_frame, text = "Input name", style = "Large.TLabel")
-    self.new_text_name_label.grid(column = 0, row = 0, sticky = tk.W)
-    self.new_text_name_entry = ttk.Entry(self.add_input_settings_frame, textvariable = self.new_input_name_strvar, width = 48, **self.largefontopt)
-    self.new_text_name_entry.grid(column = 0, row = 1, sticky = tk.W, pady = (0, 10))
+    self.new_input_name_label = ttk.Label(self.add_input_settings_frame, text = "Input name", style = "Large.TLabel")
+    self.new_input_name_label.grid(column = 0, row = 0, sticky = tk.W)
+    self.new_input_name_entry = ttk.Entry(self.add_input_settings_frame, textvariable = self.new_input_name_strvar, width = 48, **self.largefontopt)
+    self.new_input_name_entry.grid(column = 0, row = 1, sticky = tk.W, pady = (0, 10))
     
-    self.new_text_url_label = ttk.Label(self.add_input_settings_frame, text = "Text", style = "Large.TLabel")
-    self.new_text_url_label.grid(column = 0, row = 2, sticky = tk.W)
-    self.new_text_url_entry = ttk.Entry(self.add_input_settings_frame, textvariable = self.new_text_text_strvar, width = 48, **self.largefontopt)
-    self.new_text_url_entry.grid(column = 0, row = 3, sticky = tk.W, pady = (0, 10))
+    self.new_text_text_label = ttk.Label(self.add_input_settings_frame, text = "Text", style = "Large.TLabel")
+    self.new_text_text_label.grid(column = 0, row = 2, sticky = tk.W)
+    self.new_text_text_entry = ttk.Entry(self.add_input_settings_frame, textvariable = self.new_text_text_strvar, width = 48, **self.largefontopt)
+    self.new_text_text_entry.grid(column = 0, row = 3, sticky = tk.W, pady = (0, 10))
     
-    self.add_text_button_frame = ttk.Frame(self.add_input_settings_frame)
-    self.add_text_button_frame.grid(column = 0, row = 5, sticky = tk.E)
+    self.add_input_button_frame = ttk.Frame(self.add_input_settings_frame)
+    self.add_input_button_frame.grid(column = 0, row = 5, sticky = tk.E)
     
-    def addimg() -> None:
+    def addtext() -> None:
       self.queue_add_text_req()
       self.close_add_input_dialog()
     
-    self.new_image_submit = ttk.Button(self.add_text_button_frame, text = "Add", command = addimg, padding = "5 0 0 0", style = "Large.TButton")
-    self.new_image_submit.grid(column = 0, row = 0, sticky = tk.E, padx = (5, 5))
+    self.new_input_submit = ttk.Button(self.add_input_button_frame, text = "Add", command = addtext, padding = "5 0 0 0", style = "Large.TButton")
+    self.new_input_submit.grid(column = 0, row = 0, sticky = tk.E, padx = (5, 5))
   
-    self.new_image_cancel = ttk.Button(self.add_text_button_frame, text = "Cancel", command = self.close_add_input_dialog, style="Large.TButton")
-    self.new_image_cancel.grid(column = 1, row = 0, sticky = tk.E, padx = (5, 5))
+    self.new_input_cancel = ttk.Button(self.add_input_button_frame, text = "Cancel", command = self.close_add_input_dialog, style="Large.TButton")
+    self.new_input_cancel.grid(column = 1, row = 0, sticky = tk.E, padx = (5, 5))
+    
+  def setup_add_countdown_dialog(self) -> None:
+    self.new_input_name_label = ttk.Label(self.add_input_settings_frame, text = "Input name", style = "Large.TLabel")
+    self.new_input_name_label.grid(column = 0, row = 0, sticky = tk.W)
+    self.new_input_name_entry = ttk.Entry(self.add_input_settings_frame, textvariable = self.new_input_name_strvar, width = 48, **self.largefontopt)
+    self.new_input_name_entry.grid(column = 0, row = 1, sticky = tk.W, pady = (0, 10))
+    
+    self.new_countdown_end_label = ttk.Label(self.add_input_settings_frame, text = "End time (YYYY-mm-dd HH:MM:SS)", style = "Large.TLabel")
+    self.new_countdown_end_label.grid(column = 0, row = 2, sticky = tk.W)
+    self.new_countdown_end_entry = ttk.Entry(self.add_input_settings_frame, textvariable = self.new_countdown_end_strvar, width = 48, **self.largefontopt)
+    self.new_countdown_end_entry.grid(column = 0, row = 3, sticky = tk.W, pady = (0, 10))
+    
+    self.add_input_button_frame = ttk.Frame(self.add_input_settings_frame)
+    self.add_input_button_frame.grid(column = 0, row = 5, sticky = tk.E)
+    
+    def addcountdown() -> None:
+      self.queue_add_countdown_req()
+      self.close_add_input_dialog()
+    
+    self.new_input_submit = ttk.Button(self.add_input_button_frame, text = "Add", command = addcountdown, padding = "5 0 0 0", style = "Large.TButton")
+    self.new_input_submit.grid(column = 0, row = 0, sticky = tk.E, padx = (5, 5))
+    
+    self.new_input_cancel = ttk.Button(self.add_input_button_frame, text = "Cancel", command = self.close_add_input_dialog, style="Large.TButton")
+    self.new_input_cancel.grid(column = 1, row = 0, sticky = tk.E, padx = (5, 5))
     
   def close_add_input_dialog(self) -> None:
     self.new_input_name_strvar.set("")
     self.new_image_url_strvar.set("")
     self.new_text_text_strvar.set("")
+    self.new_countdown_end_strvar.set("")
     self.add_input_dialog.destroy()
   
   def setup_add_input_dialog(self) -> None:
@@ -525,10 +558,15 @@ class OBS_WS_GUI:
       self.setup_add_image_dialog()
     elif inputtype == "text":
       self.setup_add_text_dialog()
+    elif inputtype == "countdown":
+      self.setup_add_countdown_dialog()
     
   def queue_add_image_req(self) -> None:
     img_name = self.new_input_name_strvar.get()
     img_url  = self.new_image_url_strvar.get()
+    
+    inp = imgin.ImageInput(None, None, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", img_name)
+    self.scene_items.append(inp)
     
     if img_name != "" and img_url != "":
       img_req  = simpleobsws.Request('CreateInput', { 'sceneName': self.current_scene, 'inputName': img_name, 'inputKind': 'image_source', 'inputSettings': { 'file': img_url }, 'sceneItemEnabled': True })
@@ -539,8 +577,25 @@ class OBS_WS_GUI:
     input_text = self.new_text_text_strvar.get()
     input_kind = 'text_gdiplus_v2' if self.platform == "windows" else 'text_ft2_source_v2'
     
+    inp = textin.TextInput(None, None, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name)
+    self.scene_items.append(inp)
+    
     if input_name != "":
       img_req  = simpleobsws.Request('CreateInput', { 'sceneName': self.current_scene, 'inputName': input_name, 'inputKind': input_kind, 'inputSettings': { 'text': input_text }, 'sceneItemEnabled': True })
+      self.requests_queue.append(img_req)
+    
+  def queue_add_countdown_req(self) -> None:
+    input_name = self.new_input_name_strvar.get()
+    input_end  = self.new_countdown_end_strvar.get()
+    input_kind = 'text_gdiplus_v2' if self.platform == "windows" else 'text_ft2_source_v2'
+    
+    enddt = dt.datetime.strptime(input_end, textin.COUNTDOWN_END_FORMAT)
+    
+    inp = textin.CountdownInput(None, None, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name, enddt)
+    self.scene_items.append(inp)
+    
+    if input_name != "":
+      img_req  = simpleobsws.Request('CreateInput', { 'sceneName': self.current_scene, 'inputName': input_name, 'inputKind': input_kind, 'inputSettings': { 'text': "" }, 'sceneItemEnabled': True })
       self.requests_queue.append(img_req)
   
   def set_conn_ui_state(self, disabled : bool, submit_str : str) -> None:
@@ -626,6 +681,14 @@ class OBS_WS_GUI:
         return item
     return None
   
+  def find_uninit_item(self, sourceName : str) -> obsobj.OBS_Object:
+    for item in self.scene_items:
+      if (item.source_name == sourceName) and \
+         (not item.scene_item_id) and \
+         (not item.scene_item_index):
+           return item
+    return None
+  
   async def get_image_for_item(self, item : imgin.ImageInput) -> None:
     req = simpleobsws.Request('GetInputSettings', { 'inputName': item.source_name })
     ret = await self.ws.call(req)
@@ -683,6 +746,10 @@ class OBS_WS_GUI:
     
     for saved in self.scene_items[:]:
       found = False
+      if not saved.scene_item_id and not saved.scene_item_index:
+        found = True
+        continue
+      
       for active in item_list:
         if saved.scene_item_id == active['sceneItemId']:
           found = True
@@ -692,7 +759,16 @@ class OBS_WS_GUI:
         self.scene_items.remove(saved)
         
     for i in item_list:
-      item = self.find_scene_item(i['sceneItemId'])
+      name = i['sourceName']
+      itemId = i['sceneItemId']
+      itemIndex = i['sceneItemIndex']
+      kind = i['inputKind']
+      
+      item = self.find_scene_item(itemId)
+      
+      if not item:
+        item = self.find_uninit_item(name)
+      
       tf = i['sceneItemTransform']
       
       # print(tf)
@@ -709,32 +785,36 @@ class OBS_WS_GUI:
       sw = tf['sourceWidth']
       sh = tf['sourceHeight']
       
-      if tf['boundsType'] == 'OBS_BOUNDS_SCALE_INNER':
+      boundstype = tf['boundsType']
+      
+      if boundstype == 'OBS_BOUNDS_SCALE_INNER':
         w = tf['boundsWidth']
         h = tf['boundsHeight']
       
       if item:
         item.set_transform(x, y, w, h, (math.pi * a / 180.0), local = False)
-        item.set_source_name(i['sourceName'])
+        item.set_source_name(name)
+        item.scene_item_id = itemId
+        item.scene_item_index = itemIndex
         item.source_width = sw
         item.source_height = sh
-        item.bounds_type = tf['boundsType']
-        item.scene_item_index = i['sceneItemIndex']
+        item.bounds_type = boundstype
+        item.scene_item_index = itemIndex
         
-        if i['inputKind'] == 'image_source':
+        if kind == 'image_source':
           await self.get_image_for_item(item)
-        if i['inputKind'] == 'text_gdiplus_v2' or i['inputKind'] == 'text_ft2_source_v2':
+        if kind == 'text_gdiplus_v2' or kind == 'text_ft2_source_v2':
           await self.get_text_settings(item)
         
       else:
-        if i['inputKind'] == 'image_source':
-          item = imgin.ImageInput(i['sceneItemId'], i['sceneItemIndex'], self.canvas, self.screen, x, y, w, h, a, sw, sh, tf['boundsType'], i['sourceName'])
+        if kind == 'image_source':
+          item = imgin.ImageInput(itemId, itemIndex, self.canvas, self.screen, x, y, w, h, a, sw, sh, boundstype, name)
           await self.get_image_for_item(item)
-        elif i['inputKind'] == 'text_gdiplus_v2' or i['inputKind'] == 'text_ft2_source_v2':
-          item = textin.TextInput(i['sceneItemId'], i['sceneItemIndex'], self.canvas, self.screen, x, y, w, h, a, sw, sh, tf['boundsType'], i['sourceName'])
+        elif kind == 'text_gdiplus_v2' or kind == 'text_ft2_source_v2':
+          item = textin.TextInput(itemId, itemIndex, self.canvas, self.screen, x, y, w, h, a, sw, sh, boundstype, name)
           await self.get_text_settings(item)
         else:
-          item = obsobj.OBS_Object(i['sceneItemId'], i['sceneItemIndex'], self.canvas, self.screen, x, y, w, h, a, sw, sh, tf['boundsType'], i['sourceName'])
+          item = obsobj.OBS_Object(itemId, itemIndex, self.canvas, self.screen, x, y, w, h, a, sw, sh, boundstype, name)
           item.set_interactable(False)
           
         self.scene_items.append(item)

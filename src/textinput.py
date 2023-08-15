@@ -1,10 +1,27 @@
+import datetime as dt
 import math
 import tkinter as tk
+from string import Template
 from tkinter import font, ttk
 
 import simpleobsws
 
 import obs_object as obsobj
+
+COUNTDOWN_END_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+class DeltaTemplate(Template):
+    delimiter = "%"
+
+def strfdelta(tdelta, fmt):
+    d = {"D": tdelta.days}
+    hours, rem = divmod(tdelta.seconds, 3600)
+    minutes, seconds = divmod(rem, 60)
+    d["H"] = '{:02d}'.format(hours)
+    d["M"] = '{:02d}'.format(minutes)
+    d["S"] = '{:02d}'.format(seconds)
+    t = DeltaTemplate(fmt)
+    return t.substitute(**d)
 
 class TextInput(obsobj.OBS_Object):
   text = ""
@@ -15,10 +32,10 @@ class TextInput(obsobj.OBS_Object):
   vertical = False
   color = "#fff"
   
-  def __init__(self, scene_item_id : int, scene_item_index : int, canvas : tk.Canvas, screen, x : float, y : float, width : float, height : float, source_width : float, source_height : float, bounds_type : str, label : str = "", interactable : bool = True):
+  def __init__(self, scene_item_id : int, scene_item_index : int, canvas : tk.Canvas, screen, x : float, y : float, width : float, height : float, rotation : float, source_width : float, source_height : float, bounds_type : str, label : str = "", interactable : bool = True):
     self.text_font = font.Font(family="Helvetica", size = 1)
     
-    super().__init__(scene_item_id, scene_item_index, canvas, screen, x, y, width, height, source_width, source_height, bounds_type, label, interactable)
+    super().__init__(scene_item_id, scene_item_index, canvas, screen, x, y, width, height, rotation, source_width, source_height, bounds_type, label, interactable)
     
     
     self.text_id = self.canvas.create_text((self.polygon.point(0).x + self.polygon.point(2).x) / 2.0, (self.polygon.point(0).y + self.polygon.point(2).y) / 2.0, fill = self.default_color, text = self.text, font = self.text_font, anchor = tk.CENTER)
@@ -79,12 +96,16 @@ class TextInput(obsobj.OBS_Object):
       self.canvas.coords(self.text_id, (self.polygon.point(0).x + self.polygon.point(2).x) / 2.0, (self.polygon.point(0).y + self.polygon.point(2).y) / 2.0)
       self.canvas.itemconfig(self.text_id, font = self.text_font, angle = (-180.0 * self.rotation / math.pi))
       
+  def update_input_text(self, gui : 'owg.OBS_WS_GUI'):
+    req = simpleobsws.Request('SetInputSettings', { 'inputName': self.source_name, 'inputSettings': { 'text': self.text }})
+    gui.requests_queue.append(req)
+      
   def queue_update_req(self, gui : 'owg.OBS_WS_GUI') -> None:
     newtext = self.modify_text_strvar.get()
     
     if self.text != newtext:
-      req = simpleobsws.Request('SetInputSettings', { 'inputName': self.source_name, 'inputSettings': { 'text': newtext }})
-      gui.requests_queue.append(req)
+      self.set_text(newtext)
+      self.update_input_text(gui)
     
     return super().queue_update_req(gui)
   
@@ -145,5 +166,61 @@ class TextInput(obsobj.OBS_Object):
     self.adjust_modify_ui(gui, self.modify_text_strvar.get())
     
     return super().setup_modify_ui(gui)
+  
+class CountdownInput(TextInput):
+  end_time : dt.datetime = None
+  text_format : str = '%H:%M:%S'
+  last_text : str = ""
+  
+  def __init__(self, scene_item_id : int, scene_item_index : int, canvas : tk.Canvas, screen, x : float, y : float, width : float, height : float, rotation : float, source_width : float, source_height : float, bounds_type : str, label : str = "", end : dt.datetime = None, interactable : bool = True):
+    super().__init__(scene_item_id, scene_item_index, canvas, screen, x, y, width, height, rotation, source_width, source_height, bounds_type, label, interactable)
+    self.end_time = end
+  
+  def update(self, gui : 'owg.OBS_WS_GUI'):
+    time_til = self.end_time - dt.datetime.now()
+    self.set_text(strfdelta(time_til, self.text_format))
+    
+    if self.last_text != self.text:
+      self.update_input_text(gui)
+      self.last_text = self.text
+      
+  def queue_update_req(self, gui : 'owg.OBS_WS_GUI') -> None:
+    newend = self.modify_end_strvar.get()
+    newdt = dt.datetime.strptime(newend, COUNTDOWN_END_FORMAT)
+    
+    if self.end_time != newdt:
+      self.end_time = newdt
+      self.update(gui)
+      
+    obsobj.OBS_Object.queue_update_req(self, gui)
+  
+  def setup_modify_ui(self, gui : 'owg.OBS_WS_GUI') -> None:
+    gui.modifyframe.columnconfigure(0, weight = 1)
+    
+    self.modify_name_label = ttk.Label(gui.modifyframe, text = "Name:")
+    self.modify_name_label.grid(column = 0, row = 0, sticky = tk.W)
+    
+    self.modify_name_strvar = tk.StringVar(gui.root, self.source_name)
+    self.modify_name_entry = ttk.Entry(gui.modifyframe, textvariable=self.modify_name_strvar)
+    self.modify_name_entry.grid(column = 0, row = 1, sticky = (tk.W, tk.E), pady = (0, 5))
+    
+    self.modify_end_label = ttk.Label(gui.modifyframe, text = "End time:")
+    self.modify_end_label.grid(column = 0, row = 2, sticky = tk.W)
+    
+    self.modify_end_strvar = tk.StringVar(gui.root, self.end_time.strftime(COUNTDOWN_END_FORMAT))
+    self.modify_end_entry = ttk.Entry(gui.modifyframe, textvariable = self.modify_end_strvar)
+    self.modify_end_entry.grid(column = 0, row = 3, sticky = (tk.W, tk.E), pady = (0, 5))
+    
+    self.update_button = ttk.Button(gui.modifyframe, text = "Update", command = lambda: self.setup_update_dialog(gui))
+    self.update_button.grid(column = 0, row = 5, sticky = (tk.W, tk.E), pady = (0, 5))
+    
+    self.dupimage = ttk.Button(gui.modifyframe, text = "Duplicate", command = lambda: self.setup_duplicate_dialog(gui))
+    self.dupimage.grid(column = 0, row = 6, sticky = (tk.W, tk.E), pady = (0, 5))
+    
+    self.deleteimage = ttk.Button(gui.modifyframe, text = "Delete", command = lambda: self.setup_delete_dialog(gui))
+    self.deleteimage.grid(column = 0, row = 7, sticky = (tk.W, tk.E), pady = (0, 5))
+    
+    self.deleteimage = ttk.Button(gui.modifyframe, text = "Move to front", command = lambda: self.queue_move_to_front(gui))
+    self.deleteimage.grid(column = 0, row = 8, sticky = (tk.W, tk.E), pady = (0, 5))
 
 import obswsgui as owg
