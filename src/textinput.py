@@ -6,6 +6,7 @@ from tkinter import font, ttk
 
 import simpleobsws
 
+import miscutil
 import obs_object as obsobj
 
 COUNTDOWN_END_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -34,10 +35,7 @@ class TextInput(obsobj.OBS_Object):
   
   def __init__(self, scene_item_id : int, scene_item_index : int, canvas : tk.Canvas, screen, x : float, y : float, width : float, height : float, rotation : float, source_width : float, source_height : float, bounds_type : str, label : str = "", interactable : bool = True):
     self.text_font = font.Font(family="Helvetica", size = 1)
-    
     super().__init__(scene_item_id, scene_item_index, canvas, screen, x, y, width, height, rotation, source_width, source_height, bounds_type, label, interactable)
-    
-    
     self.text_id = self.canvas.create_text((self.polygon.point(0).x + self.polygon.point(2).x) / 2.0, (self.polygon.point(0).y + self.polygon.point(2).y) / 2.0, fill = self.default_color, text = self.text, font = self.text_font, anchor = tk.CENTER)
     
   def remove_from_canvas(self) -> None:
@@ -73,6 +71,11 @@ class TextInput(obsobj.OBS_Object):
       self.text = text
       self.canvas.itemconfigure(self.text_id, text = self.text)
       
+  def set_color(self, color : str) -> None:
+    if self.color != color:
+      self.color = color
+      self.canvas.itemconfigure(self.text_id, fill = self.color)
+      
   def set_vertical(self, vertical : bool) -> None:
     if self.vertical != vertical:
       self.vertical = vertical
@@ -99,6 +102,11 @@ class TextInput(obsobj.OBS_Object):
   def update_input_text(self, gui : 'owg.OBS_WS_GUI'):
     req = simpleobsws.Request('SetInputSettings', { 'inputName': self.source_name, 'inputSettings': { 'text': self.text }})
     gui.requests_queue.append(req)
+    
+  def update_text_color(self, gui : 'owg.OBS_WS_GUI', color : str = None):
+    c = self.color if not color else color
+    req = simpleobsws.Request('SetInputSettings', { 'inputName': self.source_name, 'inputSettings': { 'color': miscutil.color_to_obs(c) }})
+    gui.requests_queue.append(req)
       
   def queue_update_req(self, gui : 'owg.OBS_WS_GUI') -> None:
     newtext = self.modify_text_strvar.get()
@@ -115,6 +123,27 @@ class TextInput(obsobj.OBS_Object):
     else:
       self.counterframe.grid_remove()
     return True
+  
+  def setup_color_picker(self, gui : 'owg.OBS_WS_GUI', frame : tk.Frame) -> None:
+    def set_color(color: str):
+      self.update_text_color(gui, color)
+    
+    self.set_white  = tk.Button(frame, command = lambda: set_color("#ffffff"), bg = "#ffffff")
+    self.set_white.grid(column = 0, row = 0, sticky = (tk.W, tk.E))
+    self.set_black  = tk.Button(frame, command = lambda: set_color("#000000"), bg = "#000000")
+    self.set_black.grid(column = 0, row = 1, sticky = (tk.W, tk.E))
+    self.set_red    = tk.Button(frame, command = lambda: set_color("#ff0000"), bg = "#ff0000")
+    self.set_red.grid(column = 1, row = 0, sticky = (tk.W, tk.E))
+    self.set_green  = tk.Button(frame, command = lambda: set_color("#00ff00"), bg = "#00ff00")
+    self.set_green.grid(column = 1, row = 1, sticky = (tk.W, tk.E))
+    self.set_blue   = tk.Button(frame, command = lambda: set_color("#0000ff"), bg = "#0000ff")
+    self.set_blue.grid(column = 2, row = 0, sticky = (tk.W, tk.E))
+    self.set_purple = tk.Button(frame, command = lambda: set_color("#ff00ff"), bg = "#ff00ff")
+    self.set_purple.grid(column = 2, row = 1, sticky = (tk.W, tk.E))
+    self.set_yellow = tk.Button(frame, command = lambda: set_color("#ffff00"), bg = "#ffff00")
+    self.set_yellow.grid(column = 3, row = 0, sticky = (tk.W, tk.E))
+    self.set_cyan   = tk.Button(frame, command = lambda: set_color("#00ffff"), bg = "#00ffff")
+    self.set_cyan.grid(column = 3, row = 1, sticky = (tk.W, tk.E))
   
   def setup_modify_ui(self, gui : 'owg.OBS_WS_GUI') -> None:
     gui.modifyframe.columnconfigure(0, weight = 1)
@@ -154,14 +183,26 @@ class TextInput(obsobj.OBS_Object):
     self.update_button = ttk.Button(gui.modifyframe, text = "Update", command = lambda: self.setup_update_dialog(gui))
     self.update_button.grid(column = 0, row = 5, sticky = (tk.W, tk.E), pady = (0, 5))
     
+    self.modify_color_label = ttk.Label(gui.modifyframe, text = "Color:")
+    self.modify_color_label.grid(column = 0, row = 6, sticky = tk.W)
+    
+    self.modify_color_frame = ttk.Frame(gui.modifyframe, padding = "2 0 2 10")
+    self.modify_color_frame.grid(column = 0, row = 7, rowspan = 2, sticky = (tk.N, tk.W, tk.E, tk.S))
+    self.modify_color_frame.columnconfigure(0, weight = 1)
+    self.modify_color_frame.columnconfigure(1, weight = 1)
+    self.modify_color_frame.columnconfigure(2, weight = 1)
+    self.modify_color_frame.columnconfigure(3, weight = 1)
+    
+    self.setup_color_picker(gui, self.modify_color_frame)
+    
     self.dupimage = ttk.Button(gui.modifyframe, text = "Duplicate", command = lambda: self.setup_duplicate_dialog(gui))
-    self.dupimage.grid(column = 0, row = 6, sticky = (tk.W, tk.E), pady = (0, 5))
+    self.dupimage.grid(column = 0, row = 9, sticky = (tk.W, tk.E), pady = (0, 5))
     
     self.deleteimage = ttk.Button(gui.modifyframe, text = "Delete", command = lambda: self.setup_delete_dialog(gui))
-    self.deleteimage.grid(column = 0, row = 7, sticky = (tk.W, tk.E), pady = (0, 5))
+    self.deleteimage.grid(column = 0, row = 10, sticky = (tk.W, tk.E), pady = (0, 5))
     
     self.deleteimage = ttk.Button(gui.modifyframe, text = "Move to front", command = lambda: self.queue_move_to_front(gui))
-    self.deleteimage.grid(column = 0, row = 8, sticky = (tk.W, tk.E), pady = (0, 5))
+    self.deleteimage.grid(column = 0, row = 11, sticky = (tk.W, tk.E), pady = (0, 5))
     
     self.adjust_modify_ui(gui, self.modify_text_strvar.get())
     
@@ -214,13 +255,25 @@ class CountdownInput(TextInput):
     self.update_button = ttk.Button(gui.modifyframe, text = "Update", command = lambda: self.setup_update_dialog(gui))
     self.update_button.grid(column = 0, row = 5, sticky = (tk.W, tk.E), pady = (0, 5))
     
+    self.modify_color_label = ttk.Label(gui.modifyframe, text = "Color:")
+    self.modify_color_label.grid(column = 0, row = 6, sticky = tk.W)
+    
+    self.modify_color_frame = ttk.Frame(gui.modifyframe, padding = "2 0 2 10")
+    self.modify_color_frame.grid(column = 0, row = 7, rowspan = 2, sticky = (tk.N, tk.W, tk.E, tk.S))
+    self.modify_color_frame.columnconfigure(0, weight = 1)
+    self.modify_color_frame.columnconfigure(1, weight = 1)
+    self.modify_color_frame.columnconfigure(2, weight = 1)
+    self.modify_color_frame.columnconfigure(3, weight = 1)
+    
+    self.setup_color_picker(gui, self.modify_color_frame)
+    
     self.dupimage = ttk.Button(gui.modifyframe, text = "Duplicate", command = lambda: self.setup_duplicate_dialog(gui))
-    self.dupimage.grid(column = 0, row = 6, sticky = (tk.W, tk.E), pady = (0, 5))
+    self.dupimage.grid(column = 0, row = 9, sticky = (tk.W, tk.E), pady = (0, 5))
     
     self.deleteimage = ttk.Button(gui.modifyframe, text = "Delete", command = lambda: self.setup_delete_dialog(gui))
-    self.deleteimage.grid(column = 0, row = 7, sticky = (tk.W, tk.E), pady = (0, 5))
+    self.deleteimage.grid(column = 0, row = 10, sticky = (tk.W, tk.E), pady = (0, 5))
     
     self.deleteimage = ttk.Button(gui.modifyframe, text = "Move to front", command = lambda: self.queue_move_to_front(gui))
-    self.deleteimage.grid(column = 0, row = 8, sticky = (tk.W, tk.E), pady = (0, 5))
+    self.deleteimage.grid(column = 0, row = 11, sticky = (tk.W, tk.E), pady = (0, 5))
 
 import obswsgui as owg

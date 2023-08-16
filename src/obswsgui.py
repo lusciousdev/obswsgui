@@ -13,6 +13,7 @@ from typing import List, Tuple
 import simpleobsws
 
 import geometryutil as geom
+import miscutil
 import imageinput as imgin
 import obs_object as obsobj
 import outputbounds as bounds
@@ -498,6 +499,7 @@ class OBS_WS_GUI:
     
     self.new_countdown_end_label = ttk.Label(self.add_input_settings_frame, text = "End time (YYYY-mm-dd HH:MM:SS)", style = "Large.TLabel")
     self.new_countdown_end_label.grid(column = 0, row = 2, sticky = tk.W)
+    self.new_countdown_end_strvar.set((dt.datetime.now() + dt.timedelta(hours = 1)).strftime(textin.COUNTDOWN_END_FORMAT))
     self.new_countdown_end_entry = ttk.Entry(self.add_input_settings_frame, textvariable = self.new_countdown_end_strvar, width = 48, **self.largefontopt)
     self.new_countdown_end_entry.grid(column = 0, row = 3, sticky = tk.W, pady = (0, 10))
     
@@ -712,6 +714,9 @@ class OBS_WS_GUI:
       if 'vertical' in ret.responseData['inputSettings']:
         vertical = ret.responseData['inputSettings']['vertical']
         item.set_vertical(vertical)
+      if 'color' in ret.responseData['inputSettings']:
+        color = miscutil.obs_to_color(ret.responseData['inputSettings']['color'])
+        item.set_color(color)
   
   async def get_scene_state(self) -> None:
     req = simpleobsws.Request('GetCurrentProgramScene')
