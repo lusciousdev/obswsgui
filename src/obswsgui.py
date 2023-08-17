@@ -8,7 +8,7 @@ import math
 import time
 import tkinter as tk
 from tkinter import font, ttk
-from typing import List, Tuple
+from typing import List, Tuple, Callable
 
 import simpleobsws
 
@@ -58,7 +58,7 @@ class OBS_WS_GUI:
   
   style : ttk.Style = None
   
-  input_types : List[str] = ["image", "text", "countdown"]
+  input_types : List[str] = ["image", "text", "countdown", "timer"]
   
   rotation_groove : float = 8.0 # degrees
   edge_groove     : float = 8.0 # pixels
@@ -82,9 +82,7 @@ class OBS_WS_GUI:
     self.new_input_type_strvar = tk.StringVar(self.root, "image")
     self.new_input_name_strvar = tk.StringVar(self.root, "")
     
-    self.new_image_url_strvar     = tk.StringVar(self.root, "")
-    self.new_text_text_strvar     = tk.StringVar(self.root, "")
-    self.new_countdown_end_strvar = tk.StringVar(self.root, "")
+    self.new_input_param_1_strvar = tk.StringVar(self.root, "")
     
     self.style = ttk.Style(self.root)
     self.style.theme_create("obswsgui", parent = "alt", settings = {
@@ -147,7 +145,8 @@ class OBS_WS_GUI:
       self.queue_item_transform_requests()
       loop.run_until_complete(self.async_update())
       
-      waittime = (1.0 / self.framerate) - (time.time() - start)
+      frametime = (time.time() - start)
+      waittime = (1.0 / self.framerate) - frametime
       if waittime > 0:
         time.sleep(waittime)
         
@@ -443,22 +442,23 @@ class OBS_WS_GUI:
     
     self.canvas_configure()
     
-  def setup_add_image_dialog(self) -> None:
-    self.new_input_name_label = ttk.Label(self.add_input_settings_frame, text = "Input name", style = "Large.TLabel")
-    self.new_input_name_label.grid(column = 0, row = 0, sticky = tk.W)
-    self.new_input_name_entry = ttk.Entry(self.add_input_settings_frame, textvariable = self.new_input_name_strvar, width = 48, **self.largefontopt)
-    self.new_input_name_entry.grid(column = 0, row = 1, sticky = tk.W, pady = (0, 10))
+  def setup_add_input_name(self, frame : tk.Frame, row : int = 0) -> int:
+    self.new_input_name_label = ttk.Label(frame, text = "Input name", style = "Large.TLabel")
+    self.new_input_name_label.grid(column = 0, row = row, sticky = tk.W)
+    row += 1
+    self.new_input_name_entry = ttk.Entry(frame, textvariable = self.new_input_name_strvar, width = 48, **self.largefontopt)
+    self.new_input_name_entry.grid(column = 0, row = row, sticky = tk.W, pady = (0, 10))
+    row += 1
     
-    self.new_image_url_label = ttk.Label(self.add_input_settings_frame, text = "Image URL (must be online)", style = "Large.TLabel")
-    self.new_image_url_label.grid(column = 0, row = 2, sticky = tk.W)
-    self.new_image_url_entry = ttk.Entry(self.add_input_settings_frame, textvariable = self.new_image_url_strvar, width = 48, **self.largefontopt)
-    self.new_image_url_entry.grid(column = 0, row = 3, sticky = tk.W, pady = (0, 10))
-    
-    self.add_input_button_frame = ttk.Frame(self.add_input_settings_frame)
-    self.add_input_button_frame.grid(column = 0, row = 5, sticky= tk.E)
+    return row
+  
+  def setup_add_input_buttons(self, frame : tk.Frame, addcb : Callable, row : int = 0) -> int:
+    self.add_input_button_frame = ttk.Frame(frame)
+    self.add_input_button_frame.grid(column = 0, row = row, sticky= tk.E)
+    row += 1
     
     def addimg() -> None:
-      self.queue_add_image_req()
+      addcb()
       self.close_add_input_dialog()
     
     self.new_input_submit = ttk.Button(self.add_input_button_frame, text = "Add", command = addimg, padding = "5 0 0 0", style = "Large.TButton")
@@ -467,60 +467,61 @@ class OBS_WS_GUI:
     self.new_input_cancel = ttk.Button(self.add_input_button_frame, text = "Cancel", command = self.close_add_input_dialog, style="Large.TButton")
     self.new_input_cancel.grid(column = 1, row = 0, sticky = tk.E, padx = (5, 5))
     
-  def setup_add_text_dialog(self) -> None:
-    self.new_input_name_label = ttk.Label(self.add_input_settings_frame, text = "Input name", style = "Large.TLabel")
-    self.new_input_name_label.grid(column = 0, row = 0, sticky = tk.W)
-    self.new_input_name_entry = ttk.Entry(self.add_input_settings_frame, textvariable = self.new_input_name_strvar, width = 48, **self.largefontopt)
-    self.new_input_name_entry.grid(column = 0, row = 1, sticky = tk.W, pady = (0, 10))
+    return row
     
-    self.new_text_text_label = ttk.Label(self.add_input_settings_frame, text = "Text", style = "Large.TLabel")
-    self.new_text_text_label.grid(column = 0, row = 2, sticky = tk.W)
-    self.new_text_text_entry = ttk.Entry(self.add_input_settings_frame, textvariable = self.new_text_text_strvar, width = 48, **self.largefontopt)
-    self.new_text_text_entry.grid(column = 0, row = 3, sticky = tk.W, pady = (0, 10))
+  def setup_add_image_dialog(self, frame : tk.Frame) -> None:
+    row = 0
+    row = self.setup_add_input_name(frame, row)
     
-    self.add_input_button_frame = ttk.Frame(self.add_input_settings_frame)
-    self.add_input_button_frame.grid(column = 0, row = 5, sticky = tk.E)
+    self.new_image_url_label = ttk.Label(frame, text = "Image URL (must be online)", style = "Large.TLabel")
+    self.new_image_url_label.grid(column = 0, row = row, sticky = tk.W)
+    row += 1
+    self.new_image_url_entry = ttk.Entry(frame, textvariable = self.new_input_param_1_strvar, width = 48, **self.largefontopt)
+    self.new_image_url_entry.grid(column = 0, row = row, sticky = tk.W, pady = (0, 10))
+    row += 1
     
-    def addtext() -> None:
-      self.queue_add_text_req()
-      self.close_add_input_dialog()
+    row = self.setup_add_input_buttons(frame, self.queue_add_image_req, row)
     
-    self.new_input_submit = ttk.Button(self.add_input_button_frame, text = "Add", command = addtext, padding = "5 0 0 0", style = "Large.TButton")
-    self.new_input_submit.grid(column = 0, row = 0, sticky = tk.E, padx = (5, 5))
-  
-    self.new_input_cancel = ttk.Button(self.add_input_button_frame, text = "Cancel", command = self.close_add_input_dialog, style="Large.TButton")
-    self.new_input_cancel.grid(column = 1, row = 0, sticky = tk.E, padx = (5, 5))
+  def setup_add_text_dialog(self, frame : tk.Frame) -> None:
+    row = 0
+    row = self.setup_add_input_name(frame, row)
     
-  def setup_add_countdown_dialog(self) -> None:
-    self.new_input_name_label = ttk.Label(self.add_input_settings_frame, text = "Input name", style = "Large.TLabel")
-    self.new_input_name_label.grid(column = 0, row = 0, sticky = tk.W)
-    self.new_input_name_entry = ttk.Entry(self.add_input_settings_frame, textvariable = self.new_input_name_strvar, width = 48, **self.largefontopt)
-    self.new_input_name_entry.grid(column = 0, row = 1, sticky = tk.W, pady = (0, 10))
+    self.new_text_text_label = ttk.Label(frame, text = "Text", style = "Large.TLabel")
+    self.new_text_text_label.grid(column = 0, row = row, sticky = tk.W)
+    row += 1
+    self.new_text_text_entry = ttk.Entry(frame, textvariable = self.new_input_param_1_strvar, width = 48, **self.largefontopt)
+    self.new_text_text_entry.grid(column = 0, row = row, sticky = tk.W, pady = (0, 10))
+    row += 1    
     
-    self.new_countdown_end_label = ttk.Label(self.add_input_settings_frame, text = "End time (YYYY-mm-dd HH:MM:SS)", style = "Large.TLabel")
-    self.new_countdown_end_label.grid(column = 0, row = 2, sticky = tk.W)
-    self.new_countdown_end_strvar.set((dt.datetime.now() + dt.timedelta(hours = 1)).strftime(textin.COUNTDOWN_END_FORMAT))
-    self.new_countdown_end_entry = ttk.Entry(self.add_input_settings_frame, textvariable = self.new_countdown_end_strvar, width = 48, **self.largefontopt)
-    self.new_countdown_end_entry.grid(column = 0, row = 3, sticky = tk.W, pady = (0, 10))
+    row = self.setup_add_input_buttons(frame, self.queue_add_text_req, row)
     
-    self.add_input_button_frame = ttk.Frame(self.add_input_settings_frame)
-    self.add_input_button_frame.grid(column = 0, row = 5, sticky = tk.E)
+  def setup_add_countdown_dialog(self, frame : tk.Frame) -> None:
+    row = 0
+    row = self.setup_add_input_name(frame, row)
     
-    def addcountdown() -> None:
-      self.queue_add_countdown_req()
-      self.close_add_input_dialog()
+    self.timer_info_label = ttk.Label(frame, text = "End time (YYYY-mm-dd HH:MM:SS)", style = "Large.TLabel")
+    self.timer_info_label.grid(column = 0, row = row, sticky = tk.W)
+    row += 1
+    self.new_input_param_1_strvar.set((dt.datetime.now() + dt.timedelta(hours = 1)).strftime(textin.COUNTDOWN_END_FORMAT))
+    self.new_countdown_end_entry = ttk.Entry(frame, textvariable = self.new_input_param_1_strvar, width = 48, **self.largefontopt)
+    self.new_countdown_end_entry.grid(column = 0, row = row, sticky = tk.W, pady = (0, 10))
+    row += 1
     
-    self.new_input_submit = ttk.Button(self.add_input_button_frame, text = "Add", command = addcountdown, padding = "5 0 0 0", style = "Large.TButton")
-    self.new_input_submit.grid(column = 0, row = 0, sticky = tk.E, padx = (5, 5))
+    row = self.setup_add_input_buttons(frame, self.queue_add_countdown_req, row)
     
-    self.new_input_cancel = ttk.Button(self.add_input_button_frame, text = "Cancel", command = self.close_add_input_dialog, style="Large.TButton")
-    self.new_input_cancel.grid(column = 1, row = 0, sticky = tk.E, padx = (5, 5))
+  def setup_add_timer_dialog(self, frame : tk.Frame) -> None:
+    row = 0
+    row = self.setup_add_input_name(frame, row)
+    
+    self.timer_info_label = ttk.Label(frame, text = "Timer will start when added.", style = "Large.TLabel")
+    self.timer_info_label.grid(column = 0, row = row, pady = (10, 10), sticky = tk.W)
+    row += 1
+    
+    row = self.setup_add_input_buttons(frame, self.queue_add_timer_req, row)
     
   def close_add_input_dialog(self) -> None:
     self.new_input_name_strvar.set("")
-    self.new_image_url_strvar.set("")
-    self.new_text_text_strvar.set("")
-    self.new_countdown_end_strvar.set("")
+    self.new_input_param_1_strvar.set("")
     self.add_input_dialog.destroy()
   
   def setup_add_input_dialog(self) -> None:
@@ -555,17 +556,21 @@ class OBS_WS_GUI:
     # clear the input settings frame
     for item in self.add_input_settings_frame.winfo_children():
       item.destroy()
+      
+    frame = self.add_input_settings_frame
     
     if inputtype == "image":
-      self.setup_add_image_dialog()
+      self.setup_add_image_dialog(frame)
     elif inputtype == "text":
-      self.setup_add_text_dialog()
+      self.setup_add_text_dialog(frame)
     elif inputtype == "countdown":
-      self.setup_add_countdown_dialog()
+      self.setup_add_countdown_dialog(frame)
+    elif inputtype == "timer":
+      self.setup_add_timer_dialog(frame)
     
   def queue_add_image_req(self) -> None:
     img_name = self.new_input_name_strvar.get()
-    img_url  = self.new_image_url_strvar.get()
+    img_url  = self.new_input_param_1_strvar.get()
     
     inp = imgin.ImageInput(None, None, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", img_name)
     self.scene_items.append(inp)
@@ -576,7 +581,7 @@ class OBS_WS_GUI:
     
   def queue_add_text_req(self) -> None:
     input_name = self.new_input_name_strvar.get()
-    input_text = self.new_text_text_strvar.get()
+    input_text = self.new_input_param_1_strvar.get()
     input_kind = 'text_gdiplus_v2' if self.platform == "windows" else 'text_ft2_source_v2'
     
     inp = textin.TextInput(None, None, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name)
@@ -588,12 +593,25 @@ class OBS_WS_GUI:
     
   def queue_add_countdown_req(self) -> None:
     input_name = self.new_input_name_strvar.get()
-    input_end  = self.new_countdown_end_strvar.get()
+    input_end  = self.new_input_param_1_strvar.get()
     input_kind = 'text_gdiplus_v2' if self.platform == "windows" else 'text_ft2_source_v2'
     
     enddt = dt.datetime.strptime(input_end, textin.COUNTDOWN_END_FORMAT)
     
     inp = textin.CountdownInput(None, None, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name, enddt)
+    self.scene_items.append(inp)
+    
+    if input_name != "":
+      img_req  = simpleobsws.Request('CreateInput', { 'sceneName': self.current_scene, 'inputName': input_name, 'inputKind': input_kind, 'inputSettings': { 'text': "" }, 'sceneItemEnabled': True })
+      self.requests_queue.append(img_req)
+    
+  def queue_add_timer_req(self) -> None:
+    input_name = self.new_input_name_strvar.get()
+    input_kind = 'text_gdiplus_v2' if self.platform == "windows" else 'text_ft2_source_v2'
+    
+    startdt = dt.datetime.now()
+    
+    inp = textin.TimerInput(None, None, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name, startdt)
     self.scene_items.append(inp)
     
     if input_name != "":

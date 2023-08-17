@@ -2,7 +2,7 @@ import enum
 import math
 import tkinter as tk
 from tkinter import ttk
-from typing import List, Tuple
+from typing import List, Tuple, Callable
 
 import simpleobsws
 
@@ -334,9 +334,80 @@ class OBS_Object:
         self.canvas.tag_raise(id, self.rect_id)
     if self.item_label_id:
       self.canvas.tag_raise(self.item_label_id, self.rect_id if not self.grabber_ids else self.grabber_ids[0])
+    
+  def setup_color_picker(self, gui : 'owg.OBS_WS_GUI', frame : tk.Frame, callback : Callable[[str], None], row : int = 0) -> int:
+    self.modify_color_label = ttk.Label(frame, text = "Color:")
+    self.modify_color_label.grid(column = 0, row = row, sticky = tk.W)
+    row += 1
+    
+    self.modify_color_frame = ttk.Frame(frame, padding = "2 0 2 10")
+    self.modify_color_frame.grid(column = 0, row = row, rowspan = 2, sticky = (tk.N, tk.W, tk.E, tk.S))
+    self.modify_color_frame.columnconfigure(0, weight = 1)
+    self.modify_color_frame.columnconfigure(1, weight = 1)
+    self.modify_color_frame.columnconfigure(2, weight = 1)
+    self.modify_color_frame.columnconfigure(3, weight = 1)
+    self.modify_color_frame.columnconfigure(4, weight = 1)
+    row += 2
+    
+    self.set_white  = tk.Button(self.modify_color_frame, command = lambda: callback("#ffffff"), bg = "#ffffff")
+    self.set_white.grid(column = 0, row = 0, sticky = (tk.W, tk.E))
+    self.set_black  = tk.Button(self.modify_color_frame, command = lambda: callback("#000000"), bg = "#000000")
+    self.set_black.grid(column = 0, row = 1, sticky = (tk.W, tk.E))
+    self.set_red    = tk.Button(self.modify_color_frame, command = lambda: callback("#ff0000"), bg = "#ff0000")
+    self.set_red.grid(column = 1, row = 0, sticky = (tk.W, tk.E))
+    self.set_green  = tk.Button(self.modify_color_frame, command = lambda: callback("#00ff00"), bg = "#00ff00")
+    self.set_green.grid(column = 1, row = 1, sticky = (tk.W, tk.E))
+    self.set_blue   = tk.Button(self.modify_color_frame, command = lambda: callback("#0000ff"), bg = "#0000ff")
+    self.set_blue.grid(column = 2, row = 0, sticky = (tk.W, tk.E))
+    self.set_purple = tk.Button(self.modify_color_frame, command = lambda: callback("#ff00ff"), bg = "#ff00ff")
+    self.set_purple.grid(column = 2, row = 1, sticky = (tk.W, tk.E))
+    self.set_yellow = tk.Button(self.modify_color_frame, command = lambda: callback("#ffff00"), bg = "#ffff00")
+    self.set_yellow.grid(column = 3, row = 0, sticky = (tk.W, tk.E))
+    self.set_cyan   = tk.Button(self.modify_color_frame, command = lambda: callback("#00ffff"), bg = "#00ffff")
+    self.set_cyan.grid(column = 3, row = 1, sticky = (tk.W, tk.E))
+    self.set_yellow = tk.Button(self.modify_color_frame, command = lambda: callback("#999999"), bg = "#999999")
+    self.set_yellow.grid(column = 4, row = 0, sticky = (tk.W, tk.E))
+    self.set_cyan   = tk.Button(self.modify_color_frame, command = lambda: callback("#55007f"), bg = "#55007f")
+    self.set_cyan.grid(column = 4, row = 1, sticky = (tk.W, tk.E))
+    
+    return row
+      
+  def setup_modify_name(self, gui : 'owg.OBS_WS_GUI', frame : tk.Frame, row : int = 0) -> int:
+    self.modify_name_label = ttk.Label(frame, text = "Name:")
+    self.modify_name_label.grid(column = 0, row = row, sticky = tk.W)
+    row += 1
+    
+    self.modify_name_strvar = tk.StringVar(gui.root, self.source_name)
+    self.modify_name_entry = ttk.Entry(frame, textvariable=self.modify_name_strvar)
+    self.modify_name_entry.grid(column = 0, row = row, sticky = (tk.W, tk.E), pady = (0, 5))
+    row += 1
+    
+    return row
+  
+  def setup_update_button(self, gui : 'owg.OBS_WS_GUI', frame : tk.Frame, row : int = 0) -> int:
+    self.update_button = ttk.Button(frame, text = "Update", command = lambda: self.setup_update_dialog(gui))
+    self.update_button.grid(column = 0, row = row, sticky = (tk.W, tk.E), pady = (0, 5))
+    row += 1
+    
+    return row
+  
+  def setup_standard_buttons(self, gui : 'owg.OBS_WS_GUI', frame : tk.Frame, row : int = 0) -> int:
+    self.dupimage = ttk.Button(frame, text = "Duplicate", command = lambda: self.setup_duplicate_dialog(gui))
+    self.dupimage.grid(column = 0, row = row, sticky = (tk.W, tk.E), pady = (0, 5))
+    row += 1
+    
+    self.deleteimage = ttk.Button(frame, text = "Delete", command = lambda: self.setup_delete_dialog(gui))
+    self.deleteimage.grid(column = 0, row = row, sticky = (tk.W, tk.E), pady = (0, 5))
+    row += 1
+    
+    self.deleteimage = ttk.Button(frame, text = "Move to front", command = lambda: self.queue_move_to_front(gui))
+    self.deleteimage.grid(column = 0, row = row, sticky = (tk.W, tk.E), pady = (0, 5))
+    row += 1
+    
+    return row
       
   def setup_modify_ui(self, gui : 'owg.OBS_WS_GUI') -> None:
-    None
+    gui.modifyframe.columnconfigure(0, weight = 1)
     
   def queue_move_to_front(self, gui : 'owg.OBS_WS_GUI'):
     index_req = simpleobsws.Request('SetSceneItemIndex', { 'sceneName': gui.current_scene, 'sceneItemId': self.scene_item_id, 'sceneItemIndex': gui.scene_items[0].scene_item_index})
