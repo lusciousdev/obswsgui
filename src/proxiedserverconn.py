@@ -100,7 +100,7 @@ class ProxiedServerConnection(conn.Connection):
   async def update(self):
     while True:
       try:
-        msg = await asyncio.wait_for(self.proxyws.recv(), 0.01)
+        msg = await asyncio.wait_for(self.proxyws.recv(), 0.05)
       except:
         break
       

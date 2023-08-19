@@ -15,7 +15,7 @@ import proxiedclientconn as pcc
 class ProxiedOBS_WS_GUI(owg.OBS_WS_GUI):
   connection : pcc.ProxiedClientConnection = None
   
-  framerate = 2.0
+  framerate = 20.0
     
   async def attempt_connection(self):
     self.ready_to_connect = False
