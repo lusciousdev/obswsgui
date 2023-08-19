@@ -176,6 +176,10 @@ class OBS_Object:
     return self.selected_color if self.selected else self.default_color
     
   def set_transform(self, x = None, y = None, w = None, h = None, rot = None, local = True):
+    if self.changed and not local:
+      # ignore network updates while we are still waiting to send our state
+      return
+    
     x = self.x if x is None else x
     y = self.y if y is None else y
     w = self.width if w is None else w

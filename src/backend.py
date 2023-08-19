@@ -136,7 +136,7 @@ async def handler(websocket : server.WebSocketServerProtocol):
       
   
 async def main(host : str, port : str):
-  async with server.serve(handler, host, port):
+  async with server.serve(handler, host, port, origins = "*"):
     await asyncio.Future()
     
 if __name__ == '__main__':
