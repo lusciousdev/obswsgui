@@ -85,10 +85,10 @@ class ImageInput(obsobj.OBS_Object):
     
     if newurl != self.img_url:
       urlreq = simpleobsws.Request('SetInputSettings', { 'inputName': self.source_name, 'inputSettings': { 'file': self.modify_url_entry.get() }})
-      gui.requests_queue.append(urlreq)
+      gui.connection.queue_request(urlreq)
     if newname != self.source_name:
       namereq = simpleobsws.Request('SetInputName', { 'inputName': self.source_name, 'newInputName': self.modify_name_strvar.get()})
-      gui.requests_queue.append(namereq)
+      gui.connection.queue_request(namereq)
       
   def setup_modify_url(self, gui : 'owg.OBS_WS_GUI', frame : tk.Frame, row : int = 0) -> int:
     self.modify_url_label = ttk.Label(frame, text = "URL:")
