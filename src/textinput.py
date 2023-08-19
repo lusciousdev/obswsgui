@@ -101,12 +101,12 @@ class TextInput(obsobj.OBS_Object):
       
   def update_input_text(self, gui : 'owg.OBS_WS_GUI'):
     req = simpleobsws.Request('SetInputSettings', { 'inputName': self.source_name, 'inputSettings': { 'text': self.text }})
-    gui.requests_queue.append(req)
+    gui.connection.queue_request(req)
     
   def update_text_color(self, gui : 'owg.OBS_WS_GUI', color : str = None):
     c = self.color if not color else color
     req = simpleobsws.Request('SetInputSettings', { 'inputName': self.source_name, 'inputSettings': { 'color': miscutil.color_to_obs(c) }})
-    gui.requests_queue.append(req)
+    gui.connection.queue_request(req)
       
   def queue_update_req(self, gui : 'owg.OBS_WS_GUI') -> None:
     newtext = self.modify_text_strvar.get()

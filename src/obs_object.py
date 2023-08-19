@@ -411,11 +411,11 @@ class OBS_Object:
     
   def queue_move_to_front(self, gui : 'owg.OBS_WS_GUI'):
     index_req = simpleobsws.Request('SetSceneItemIndex', { 'sceneName': gui.current_scene, 'sceneItemId': self.scene_item_id, 'sceneItemIndex': gui.scene_items[0].scene_item_index})
-    gui.requests_queue.append(index_req)
+    gui.connection.queue_request(index_req)
     
   def queue_duplicate_req(self, gui : 'owg.OBS_WS_GUI'):
     img_req = simpleobsws.Request('DuplicateSceneItem', { 'sceneName': gui.current_scene, 'sceneItemId': self.scene_item_id})
-    gui.requests_queue.append(img_req)
+    gui.connection.queue_request(img_req)
     
   def setup_duplicate_dialog(self, gui : 'owg.OBS_WS_GUI') -> None:
     self.dup_image_dialog = tk.Toplevel(gui.root)
@@ -444,7 +444,7 @@ class OBS_Object:
     
   def queue_delete_req(self, gui : 'owg.OBS_WS_GUI') -> None:
     del_req = simpleobsws.Request('RemoveSceneItem', { 'sceneName': gui.current_scene, 'sceneItemId': self.scene_item_id })
-    gui.requests_queue.append(del_req)
+    gui.connection.queue_request(del_req)
     
   def setup_delete_dialog(self, gui : 'owg.OBS_WS_GUI') -> None:
     self.del_image_dialog = tk.Toplevel(gui.root)
@@ -472,7 +472,7 @@ class OBS_Object:
     
   def update_source_name(self, gui : 'owg.OBS_WS_GUI', new_source_name : str) -> None:
     namereq = simpleobsws.Request('SetInputName', { 'inputName': self.source_name, 'newInputName': new_source_name})
-    gui.requests_queue.append(namereq)
+    gui.connection.queue_request(namereq)
     
   def queue_update_req(self, gui : 'owg.OBS_WS_GUI') -> None:
     newname = self.modify_name_strvar.get()
