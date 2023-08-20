@@ -9,6 +9,8 @@ from websockets import exceptions as wsexceptions
 import json
 import time
 
+logging.getLogger("websockets.client").setLevel(logging.INFO)
+
 class ProxiedClientConnection(conn.Connection):
   roomcode : str = ""
   proxyws : client.WebSocketClientProtocol = None
@@ -59,7 +61,7 @@ class ProxiedClientConnection(conn.Connection):
       self.connected = False
     except OSError:
       logging.error("TCP connection failed.")
-      self.connected = False
+      self.connected = True
     except wsexceptions.InvalidHandshake:
       logging.error("Handshake failed.")
       self.connected = False

@@ -10,6 +10,8 @@ from websockets import client
 from websockets import typing as wstypes
 from websockets import exceptions as wsexceptions
 
+logging.getLogger("websockets.client").setLevel(logging.INFO)
+
 class ProxiedServerConnection(conn.Connection):
   obsws : simpleobsws.WebSocketClient = None
   proxyws : client.WebSocketClientProtocol = None
@@ -72,6 +74,9 @@ class ProxiedServerConnection(conn.Connection):
     except:
       logging.error("Unknown error encountered while connecting.")
       self.connected = False
+      
+    if not self.connected:
+      return self.connected
       
     if connected and identified:
       logging.info(f"Connected to {self.url} and room created.")

@@ -590,8 +590,8 @@ class OBS_WS_GUI:
     img_name = self.new_input_name_strvar.get()
     img_url  = self.new_input_param_1_strvar.get()
     
-    inp = imgin.ImageInput(None, None, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", img_name)
-    self.get_current_scene_items().append(inp)
+    inp = imgin.ImageInput(-1, -1, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", img_name)
+    self.scenes[self.current_scene].append(inp)
     
     if img_name != "" and img_url != "":
       img_req  = simpleobsws.Request('CreateInput', { 'sceneName': self.current_scene, 'inputName': img_name, 'inputKind': 'image_source', 'inputSettings': { 'file': img_url }, 'sceneItemEnabled': True })
@@ -602,8 +602,8 @@ class OBS_WS_GUI:
     input_text = self.new_input_param_1_strvar.get()
     input_kind = 'text_gdiplus_v2' if self.platform == "windows" else 'text_ft2_source_v2'
     
-    inp = textin.TextInput(None, None, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name)
-    self.get_current_scene_items().append(inp)
+    inp = textin.TextInput(-1, -1, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name)
+    self.scenes[self.current_scene].append(inp)
     
     if input_name != "":
       img_req  = simpleobsws.Request('CreateInput', { 'sceneName': self.current_scene, 'inputName': input_name, 'inputKind': input_kind, 'inputSettings': { 'text': input_text }, 'sceneItemEnabled': True })
@@ -616,8 +616,8 @@ class OBS_WS_GUI:
     
     enddt = dt.datetime.strptime(input_end, textin.COUNTDOWN_END_FORMAT)
     
-    inp = textin.CountdownInput(None, None, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name, enddt)
-    self.get_current_scene_items().append(inp)
+    inp = textin.CountdownInput(-1, -1, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name, enddt)
+    self.scenes[self.current_scene].append(inp)
     
     if input_name != "":
       img_req  = simpleobsws.Request('CreateInput', { 'sceneName': self.current_scene, 'inputName': input_name, 'inputKind': input_kind, 'inputSettings': { 'text': "" }, 'sceneItemEnabled': True })
@@ -629,8 +629,8 @@ class OBS_WS_GUI:
     
     startdt = dt.datetime.now()
     
-    inp = textin.TimerInput(None, None, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name, startdt)
-    self.get_current_scene_items().append(inp)
+    inp = textin.TimerInput(-1, -1, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name, startdt)
+    self.scenes[self.current_scene].append(inp)
     
     if input_name != "":
       img_req  = simpleobsws.Request('CreateInput', { 'sceneName': self.current_scene, 'inputName': input_name, 'inputKind': input_kind, 'inputSettings': { 'text': "" }, 'sceneItemEnabled': True })
@@ -711,8 +711,8 @@ class OBS_WS_GUI:
   def find_uninit_item(self, sourceName : str) -> obsobj.OBS_Object:
     for item in self.get_current_scene_items():
       if (item.source_name == sourceName) and \
-         (not item.scene_item_id) and \
-         (not item.scene_item_index):
+         (item.scene_item_id == -1) and \
+         (item.scene_item_index == -1):
            return item
     return None
   
@@ -785,7 +785,7 @@ class OBS_WS_GUI:
           break
       if not found:
         saved.remove_from_canvas()
-        self.get_current_scene_items().remove(saved)
+        self.scenes[self.current_scene].remove(saved)
         
     for i in item_list:
       name = i['sourceName']
@@ -828,7 +828,6 @@ class OBS_WS_GUI:
         item.source_width = sw
         item.source_height = sh
         item.bounds_type = boundstype
-        item.scene_item_index = itemIndex
         
         if kind == 'image_source':
           await self.get_image_for_item(item)

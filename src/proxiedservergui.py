@@ -12,6 +12,7 @@ import threading
 import uuid
 
 import simpleobsws
+logging.getLogger("simpleobsws").setLevel(level = logging.INFO)
 
 import proxiedserverconn as psc
 
