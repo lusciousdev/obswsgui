@@ -55,17 +55,18 @@ class ProxiedOBS_WS_GUI(owg.OBS_WS_GUI):
     
     self.ip_addr_frame = ttk.Frame(self.connframe, padding = "2 2 2 2")
     self.ip_addr_frame.grid(column = 0, row = 0, sticky = (tk.N, tk.W, tk.E))
+    self.ip_addr_frame.columnconfigure(0, weight = 1)
     
-    self.ip_addr_label = ttk.Label(self.ip_addr_frame, text = "IP Address:Port/URL", style="Large.TLabel")
-    self.ip_addr_label.grid(column = 0, columnspan=2, row = 0, sticky = tk.W)
+    self.ip_addr_label = ttk.Label(self.ip_addr_frame, text = "Proxy address", style="Large.TLabel")
+    self.ip_addr_label.grid(column = 0, row = 0, sticky = tk.W)
     
     self.addr_strvar.set("ws://127.0.0.1:5544")
     self.ip_addr_entry = ttk.Entry(self.ip_addr_frame, textvariable = self.addr_strvar, width = 25, **self.largefontopt)
-    self.ip_addr_entry.grid(column = 0, columnspan=2, row = 1, sticky = (tk.W, tk.E))
+    self.ip_addr_entry.grid(column = 0, row = 1, sticky = (tk.W, tk.E))
     
     self.pw_frame = ttk.Frame(self.connframe, padding = "2 2 2 2")
     self.pw_frame.grid(column = 0, row = 1, sticky = (tk.S, tk.W, tk.E))
-    self.pw_frame.grid_columnconfigure(1, weight = 1)
+    self.pw_frame.columnconfigure(1, weight = 1)
     
     self.pw_label = ttk.Label(self.pw_frame, text = "Room code: ", style="Large.TLabel")
     self.pw_label.grid(column = 0, row = 0)

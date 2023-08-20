@@ -165,13 +165,28 @@ class OBS_WS_GUI:
         self.setup_default_ui()
       else:
         self.set_conn_ui_state(False, "Failed to connect. Retry?")
-    if self.connected:      
+    if self.connected:
       await self.connection.update()
       await self.get_scene_state()
+      
+      if not self.connection.connected:
+        self.reset_to_connection_ui()
     
   def clear_root(self) -> None:
     for ele in self.root.winfo_children():
       ele.destroy()
+      
+  def reset_to_connection_ui(self) -> None:
+      self.connected = False
+      self.ready_to_connect = False
+      self.clear_root()
+      self.setup_connection_ui()
+      
+      self.current_scene = ""
+      self.scenes = {}
+      self.screen = None
+      self.modifyframe = None
+    
     
   def setup_connection_ui(self) -> None:
     self.connframe = ttk.Frame(self.root, padding = "12 12 12 12")
@@ -754,12 +769,13 @@ class OBS_WS_GUI:
     
     if not ret:
       logging.error("Failed to get scene items")
+      return
     
     item_list = ret.responseData['sceneItems']
     
     for saved in self.get_current_scene_items()[:]:
       found = False
-      if not saved.scene_item_id and not saved.scene_item_index:
+      if saved.scene_item_id == -1 and saved.scene_item_index == -1:
         found = True
         continue
       
@@ -807,7 +823,7 @@ class OBS_WS_GUI:
       if item:
         item.set_transform(x, y, w, h, (math.pi * a / 180.0), local = False)
         item.set_source_name(name)
-        item.scene_item_id = itemId
+        item.set_scene_item_id(itemId)
         item.scene_item_index = itemIndex
         item.source_width = sw
         item.source_height = sh
@@ -830,13 +846,13 @@ class OBS_WS_GUI:
           item = obsobj.OBS_Object(itemId, itemIndex, self.canvas, self.screen, x, y, w, h, a, sw, sh, boundstype, name)
           item.set_interactable(False)
           
-        self.get_current_scene_items().append(item)
+        self.scenes[self.current_scene].append(item)
             
     # sort the scene items to match the OBS source list
-    self.get_current_scene_items().sort(key = lambda item: item.scene_item_index if item.scene_item_index else 999, reverse = True)
+    self.scenes[self.current_scene] = sorted(self.scenes[self.current_scene], key = lambda item: item.scene_item_index if item.scene_item_index != -1 else 999, reverse = True)
     
-    for i in range(1, len(self.get_current_scene_items())):
-      self.get_current_scene_items()[i - 1].move_to_front(self.get_current_scene_items()[i].item_label_id)
+    for item in self.scenes[self.current_scene]:
+      item.move_to_back()
       
   def queue_item_transform_requests(self) -> None:
     for item in self.get_current_scene_items():

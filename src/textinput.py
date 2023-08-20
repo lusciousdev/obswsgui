@@ -101,7 +101,7 @@ class TextInput(obsobj.OBS_Object):
       self.vertical = vertical
       self.canvas.itemconfigure(self.text_id, angle = 0 if not self.vertical else 270, anchor = tk.CENTER)
       
-  def move_to_front(self, under : obsobj.OBS_Object = None) -> None:
+  def move_to_front(self, under : int = None) -> None:
     if self.text_id:
       if under:
         self.canvas.tag_raise(self.text_id, under)
@@ -109,6 +109,15 @@ class TextInput(obsobj.OBS_Object):
         self.canvas.tag_raise(self.text_id)
         
     return super().move_to_front(self.text_id)
+  
+  def move_to_back(self, above : int = None) -> None:
+    if self.text_id:
+      if above:
+        self.canvas.tag_lower(self.text_id, above)
+      else:
+        self.canvas.tag_lower(self.text_id)
+        
+    return super().move_to_back(self.text_id)
       
   def redraw(self) -> None:
     super().redraw()

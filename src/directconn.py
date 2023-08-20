@@ -26,6 +26,7 @@ class DirectConnection(conn.Connection):
     
     if not resp.ok():
       self.error_handler(resp)
+      return None
     
     return resp
     

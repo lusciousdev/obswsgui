@@ -61,14 +61,14 @@ class OBS_Object:
   hpx : float = 0.0
   
   source_name      : str = ""
-  scene_item_id    : int= 0
-  scene_item_index : int = 0
+  scene_item_id    : int = -1
+  scene_item_index : int = -1
   bounds_type      : str = ""
   
   scale : float = 1.0
   
   screen : 'OBS_Object' = None
-  canvas : tk.Canvas                 = None
+  canvas : tk.Canvas    = None
   
   rect_id            : int       = None
   item_label_id      : int       = None
@@ -190,13 +190,13 @@ class OBS_Object:
     self.polygon.point(3).y = self.polygon.point(0).y + self.hpx * math.sin((math.pi / 2) - self.rotation)
     
   def get_linewidth(self):
-    return max(1, math.ceil(self.line_width * self.scale))
+    return max(2, math.ceil(self.line_width * self.scale))
   
   def get_grabberradius(self):
-    return max(1, math.ceil(self.grabber_radius * self.scale))
+    return max(2, math.ceil(self.grabber_radius * self.scale))
   
   def get_rotatordist(self):
-    return max(1, math.ceil(self.rotator_dist * self.scale))
+    return max(15, math.ceil(self.rotator_dist * self.scale))
   
   def get_color(self):
     return self.selected_color if self.selected else self.default_color
@@ -266,6 +266,11 @@ class OBS_Object:
         self.canvas.delete(self.rotator_line_id)
         self.rotator_grabber_id = None
         self.rotator_line_id = None
+        
+  def set_scene_item_id(self, scene_item_id : int) -> None:
+    if self.scene_item_id != scene_item_id:
+      self.scene_item_id = scene_item_id
+      self.canvas.itemconfigure(self.item_label_id, text = f"{self.source_name} ({self.scene_item_id})")
     
   def set_source_name(self, source_name : str) -> None:
     if self.source_name != source_name:
@@ -300,6 +305,8 @@ class OBS_Object:
       
       self.canvas.coords(self.rotator_grabber_id, self.rotator_grabber_pos.x - gpx, self.rotator_grabber_pos.y - gpx, self.rotator_grabber_pos.x + gpx, self.rotator_grabber_pos.y + gpx)
       self.canvas.coords(self.rotator_line_id, top_middle.x, top_middle.y, self.rotator_grabber_pos.x, self.rotator_grabber_pos.y)
+      
+      self.canvas.itemconfigure(self.rotator_line_id, width = lw)
       
     self.canvas.coords(self.item_label_id, self.polygon.point(0).x, self.polygon.point(0).y - lw)
     
@@ -353,7 +360,7 @@ class OBS_Object:
       
     return ret
   
-  def move_to_front(self, under : 'OBS_Object' = None) -> None:
+  def move_to_front(self, under : int = None) -> None:
     if self.rect_id:
       if under:
         self.canvas.tag_raise(self.rect_id, under)
@@ -364,6 +371,18 @@ class OBS_Object:
         self.canvas.tag_raise(id, self.rect_id)
     if self.item_label_id:
       self.canvas.tag_raise(self.item_label_id, self.rect_id if not self.grabber_ids else self.grabber_ids[0])
+      
+  def move_to_back(self, above : int = None) -> None:
+    if self.rect_id:
+      if above:
+        self.canvas.tag_lower(self.rect_id, above)
+      else:
+        self.canvas.tag_lower(self.rect_id)
+    if self.grabber_ids:
+      for id in self.grabber_ids:
+        self.canvas.tag_lower(id, self.rect_id)
+    if self.item_label_id:
+      self.canvas.tag_lower(self.item_label_id, self.rect_id if not self.grabber_ids else self.grabber_ids[0])
     
   def setup_color_picker(self, gui : 'owg.OBS_WS_GUI', frame : tk.Frame, callback : Callable[[str], None], row : int = 0) -> int:
     self.modify_color_label = ttk.Label(frame, text = "Color:")
