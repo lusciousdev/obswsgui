@@ -140,12 +140,12 @@ async def handler(websocket : server.WebSocketServerProtocol):
       
       
 async def secure_main(host : str, port : str):
-  async with server.serve(handler, host, port, origins = "*", ssl = ssl_context):
+  async with server.serve(handler, host, port, origins = None, ssl = ssl_context):
     await asyncio.Future()
   
   
 async def main(host : str, port : str):
-  async with server.serve(handler, host, port, origins = "*"):
+  async with server.serve(handler, host, port, origins = None):
     await asyncio.Future()
     
 if __name__ == '__main__':
