@@ -359,65 +359,77 @@ class OBS_Object:
         ret = ModifyType.ROTATE
       
     return ret
+      
+  def move_id_to_front(self, id : int, under : int) -> int:
+    if id:
+      if under:
+        self.canvas.tag_raise(id, under)
+      else:
+        self.canvas.tag_raise(id)
+      return id
+    return under
   
   def move_to_front(self, under : int = None) -> None:
-    if self.rect_id:
-      if under:
-        self.canvas.tag_raise(self.rect_id, under)
-      else:
-        self.canvas.tag_raise(self.rect_id)
+    last_id = self.move_id_to_front(self.rect_id, under)
+    last_id = self.move_id_to_front(self.rotator_grabber_id, last_id)
+    last_id = self.move_id_to_front(self.rotator_line_id, last_id)
     if self.grabber_ids:
       for id in self.grabber_ids:
-        self.canvas.tag_raise(id, self.rect_id)
-    if self.item_label_id:
-      self.canvas.tag_raise(self.item_label_id, self.rect_id if not self.grabber_ids else self.grabber_ids[0])
+        last_id = self.move_id_to_front(id, last_id)
+    last_id = self.move_id_to_front(self.item_label_id, last_id)
+      
+  def move_id_to_back(self, id : int, above : int) -> int:
+    if id:
+      if above:
+        self.canvas.tag_lower(id, above)
+      else:
+        self.canvas.tag_lower(id)
+      return id
+    return above
       
   def move_to_back(self, above : int = None) -> None:
-    if self.rect_id:
-      if above:
-        self.canvas.tag_lower(self.rect_id, above)
-      else:
-        self.canvas.tag_lower(self.rect_id)
+    last_id = self.move_id_to_back(self.rect_id, above)
+    last_id = self.move_id_to_back(self.rotator_grabber_id, last_id)
+    last_id = self.move_id_to_back(self.rotator_line_id, last_id)
     if self.grabber_ids:
       for id in self.grabber_ids:
-        self.canvas.tag_lower(id, self.rect_id)
-    if self.item_label_id:
-      self.canvas.tag_lower(self.item_label_id, self.rect_id if not self.grabber_ids else self.grabber_ids[0])
+        last_id = self.move_id_to_back(id, last_id)
+    last_id = self.move_id_to_back(self.item_label_id, last_id)
     
-  def setup_color_picker(self, gui : 'owg.OBS_WS_GUI', frame : tk.Frame, callback : Callable[[str], None], row : int = 0) -> int:
-    self.modify_color_label = ttk.Label(frame, text = "Color:")
-    self.modify_color_label.grid(column = 0, row = row, sticky = tk.W)
+  def setup_color_picker(self, gui : 'owg.OBS_WS_GUI', frame : tk.Frame, label : str, callback : Callable[[str], None], row : int = 0) -> int:
+    modify_color_label = ttk.Label(frame, text = label)
+    modify_color_label.grid(column = 0, row = row, sticky = tk.W)
     row += 1
     
-    self.modify_color_frame = ttk.Frame(frame, padding = "2 0 2 10")
-    self.modify_color_frame.grid(column = 0, row = row, rowspan = 2, sticky = (tk.N, tk.W, tk.E, tk.S))
-    self.modify_color_frame.columnconfigure(0, weight = 1)
-    self.modify_color_frame.columnconfigure(1, weight = 1)
-    self.modify_color_frame.columnconfigure(2, weight = 1)
-    self.modify_color_frame.columnconfigure(3, weight = 1)
-    self.modify_color_frame.columnconfigure(4, weight = 1)
+    modify_color_frame = ttk.Frame(frame, padding = "2 0 2 10")
+    modify_color_frame.grid(column = 0, row = row, rowspan = 2, sticky = (tk.N, tk.W, tk.E, tk.S))
+    modify_color_frame.columnconfigure(0, weight = 1)
+    modify_color_frame.columnconfigure(1, weight = 1)
+    modify_color_frame.columnconfigure(2, weight = 1)
+    modify_color_frame.columnconfigure(3, weight = 1)
+    modify_color_frame.columnconfigure(4, weight = 1)
     row += 2
     
-    self.set_white  = tk.Button(self.modify_color_frame, command = lambda: callback("#ffffff"), bg = "#ffffff")
-    self.set_white.grid(column = 0, row = 0, sticky = (tk.W, tk.E))
-    self.set_black  = tk.Button(self.modify_color_frame, command = lambda: callback("#000000"), bg = "#000000")
-    self.set_black.grid(column = 0, row = 1, sticky = (tk.W, tk.E))
-    self.set_red    = tk.Button(self.modify_color_frame, command = lambda: callback("#ff0000"), bg = "#ff0000")
-    self.set_red.grid(column = 1, row = 0, sticky = (tk.W, tk.E))
-    self.set_green  = tk.Button(self.modify_color_frame, command = lambda: callback("#00ff00"), bg = "#00ff00")
-    self.set_green.grid(column = 1, row = 1, sticky = (tk.W, tk.E))
-    self.set_blue   = tk.Button(self.modify_color_frame, command = lambda: callback("#0000ff"), bg = "#0000ff")
-    self.set_blue.grid(column = 2, row = 0, sticky = (tk.W, tk.E))
-    self.set_purple = tk.Button(self.modify_color_frame, command = lambda: callback("#ff00ff"), bg = "#ff00ff")
-    self.set_purple.grid(column = 2, row = 1, sticky = (tk.W, tk.E))
-    self.set_yellow = tk.Button(self.modify_color_frame, command = lambda: callback("#ffff00"), bg = "#ffff00")
-    self.set_yellow.grid(column = 3, row = 0, sticky = (tk.W, tk.E))
-    self.set_cyan   = tk.Button(self.modify_color_frame, command = lambda: callback("#00ffff"), bg = "#00ffff")
-    self.set_cyan.grid(column = 3, row = 1, sticky = (tk.W, tk.E))
-    self.set_yellow = tk.Button(self.modify_color_frame, command = lambda: callback("#999999"), bg = "#999999")
-    self.set_yellow.grid(column = 4, row = 0, sticky = (tk.W, tk.E))
-    self.set_cyan   = tk.Button(self.modify_color_frame, command = lambda: callback("#55007f"), bg = "#55007f")
-    self.set_cyan.grid(column = 4, row = 1, sticky = (tk.W, tk.E))
+    set_white  = tk.Button(modify_color_frame, command = lambda: callback("#ffffff"), bg = "#ffffff")
+    set_white.grid(column = 0, row = 0, sticky = (tk.W, tk.E))
+    set_black  = tk.Button(modify_color_frame, command = lambda: callback("#000000"), bg = "#000000")
+    set_black.grid(column = 0, row = 1, sticky = (tk.W, tk.E))
+    set_red    = tk.Button(modify_color_frame, command = lambda: callback("#ff0000"), bg = "#ff0000")
+    set_red.grid(column = 1, row = 0, sticky = (tk.W, tk.E))
+    set_green  = tk.Button(modify_color_frame, command = lambda: callback("#00ff00"), bg = "#00ff00")
+    set_green.grid(column = 1, row = 1, sticky = (tk.W, tk.E))
+    set_blue   = tk.Button(modify_color_frame, command = lambda: callback("#0000ff"), bg = "#0000ff")
+    set_blue.grid(column = 2, row = 0, sticky = (tk.W, tk.E))
+    set_purple = tk.Button(modify_color_frame, command = lambda: callback("#ff00ff"), bg = "#ff00ff")
+    set_purple.grid(column = 2, row = 1, sticky = (tk.W, tk.E))
+    set_yellow = tk.Button(modify_color_frame, command = lambda: callback("#ffff00"), bg = "#ffff00")
+    set_yellow.grid(column = 3, row = 0, sticky = (tk.W, tk.E))
+    set_cyan   = tk.Button(modify_color_frame, command = lambda: callback("#00ffff"), bg = "#00ffff")
+    set_cyan.grid(column = 3, row = 1, sticky = (tk.W, tk.E))
+    set_yellow = tk.Button(modify_color_frame, command = lambda: callback("#999999"), bg = "#999999")
+    set_yellow.grid(column = 4, row = 0, sticky = (tk.W, tk.E))
+    set_cyan   = tk.Button(modify_color_frame, command = lambda: callback("#55007f"), bg = "#55007f")
+    set_cyan.grid(column = 4, row = 1, sticky = (tk.W, tk.E))
     
     return row
       
