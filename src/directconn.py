@@ -36,7 +36,9 @@ class DirectConnection(conn.Connection):
     
     if connected and identified:
       logging.info(f"Connected to {self.url}")
-      return True
+      self.connected = True
+      return self.connected
     else:
       logging.error(f"Failed to authenticate with {self.url}")
-      return False
+      self.connected = False
+      return self.connected

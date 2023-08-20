@@ -71,7 +71,7 @@ class OBS_WS_GUI:
     
     self.root.title("OBS WebSocket GUI")
     self.root.geometry("720x400")
-    self.root.minsize(320, 180)
+    self.root.minsize(600, 500)
     self.root.configure(background = self.background_color)
     
     self.root.columnconfigure(0, weight = 1)
@@ -144,7 +144,7 @@ class OBS_WS_GUI:
       
       self.update_modify_ui()
       self.update_items()
-      self.queue_item_transform_requests()
+      self.queue_item_modification_requests()
       loop.run_until_complete(self.async_update())
       
       frametime = (time.time() - start)
@@ -194,16 +194,17 @@ class OBS_WS_GUI:
     
     self.ip_addr_frame = ttk.Frame(self.connframe, padding = "2 2 2 2")
     self.ip_addr_frame.grid(column = 0, row = 0, sticky = (tk.N, tk.W, tk.E))
+    self.ip_addr_frame.columnconfigure(0, weight = 1)
     
-    self.ip_addr_label = ttk.Label(self.ip_addr_frame, text = "IP Address:Port/URL", style="Large.TLabel")
-    self.ip_addr_label.grid(column = 0, columnspan=2, row = 0, sticky = tk.W)
+    self.ip_addr_label = ttk.Label(self.ip_addr_frame, text = "OBS WebSocket address", style="Large.TLabel")
+    self.ip_addr_label.grid(column = 0, row = 0, sticky = tk.W)
     
     self.ip_addr_entry = ttk.Entry(self.ip_addr_frame, textvariable = self.addr_strvar, width = 25, **self.largefontopt)
-    self.ip_addr_entry.grid(column = 0, columnspan=2, row = 1, sticky = (tk.W, tk.E))
+    self.ip_addr_entry.grid(column = 0, row = 1, sticky = (tk.W, tk.E))
     
     self.pw_frame = ttk.Frame(self.connframe, padding = "2 2 2 2")
     self.pw_frame.grid(column = 0, row = 1, sticky = (tk.S, tk.W, tk.E))
-    self.pw_frame.grid_columnconfigure(1, weight = 1)
+    self.pw_frame.columnconfigure(1, weight = 1)
     
     self.pw_label = ttk.Label(self.pw_frame, text = "Password: ", style="Large.TLabel")
     self.pw_label.grid(column = 0, row = 0)
@@ -555,7 +556,7 @@ class OBS_WS_GUI:
     
     self.add_input_type_frame = ttk.Frame(self.add_input_dialog, padding = "5 5 5 5")
     self.add_input_type_frame.grid(column = 0, row = 0, sticky = (tk.N, tk.W, tk.E, tk.S))
-    self.add_input_type_frame.grid_columnconfigure(0, weight = 1)
+    self.add_input_type_frame.columnconfigure(0, weight = 1)
     
     self.add_input_type_label = ttk.Label(self.add_input_type_frame, text = "Input type", style = "Large.TLabel")
     self.add_input_type_label.grid(column = 0, row = 0, sticky = tk.W)
@@ -564,7 +565,7 @@ class OBS_WS_GUI:
     
     self.add_input_settings_frame = ttk.Frame(self.add_input_dialog, padding = "5 5 5 5")
     self.add_input_settings_frame.grid(column = 0, row = 1, sticky = (tk.N, tk.W, tk.E, tk.S))
-    self.add_input_settings_frame.grid_columnconfigure(0, weight = 1)
+    self.add_input_settings_frame.columnconfigure(0, weight = 1)
     
     self.new_input_type_change()
     
@@ -729,15 +730,22 @@ class OBS_WS_GUI:
     ret = await self.connection.request(req)
     
     if ret:
-      if 'text' in ret.responseData['inputSettings']:
-        text = ret.responseData['inputSettings']['text']
+      settings = ret.responseData['inputSettings']
+      if 'text' in settings:
+        text = settings['text']
         item.set_text(text, False)
-      if 'vertical' in ret.responseData['inputSettings']:
-        vertical = ret.responseData['inputSettings']['vertical']
+      if 'vertical' in settings:
+        vertical = settings['vertical']
         item.set_vertical(vertical)
-      if 'color' in ret.responseData['inputSettings']:
-        color = miscutil.obs_to_color(ret.responseData['inputSettings']['color'])
-        item.set_color(color)
+      if 'color' in settings:
+        color = miscutil.obs_to_color(settings['color'])
+        item.set_color(color, False)
+      if 'bk_color' in settings:
+        bk_color = miscutil.obs_to_color(settings['bk_color'])
+        item.set_background_color(bk_color, False)
+      if 'bk_opacity' in settings:
+        bk_opacity = settings['bk_opacity']
+        item.toggle_background((bk_opacity == 100), False)
   
   async def get_scene_state(self) -> None:
     req = simpleobsws.Request('GetCurrentProgramScene')
@@ -848,12 +856,14 @@ class OBS_WS_GUI:
         self.scenes[self.current_scene].append(item)
             
     # sort the scene items to match the OBS source list
+    og_scenes = self.scenes[self.current_scene][:]
     self.scenes[self.current_scene] = sorted(self.scenes[self.current_scene], key = lambda item: item.scene_item_index if item.scene_item_index != -1 else 999, reverse = True)
     
-    for item in self.scenes[self.current_scene]:
-      item.move_to_back()
+    if og_scenes != self.scenes[self.current_scene]:
+      for item in self.scenes[self.current_scene]:
+        item.move_to_back()
       
-  def queue_item_transform_requests(self) -> None:
+  def queue_item_modification_requests(self) -> None:
     for item in self.get_current_scene_items():
       if item.changed:
         self.queue_set_item_transform(item)
@@ -862,6 +872,10 @@ class OBS_WS_GUI:
         if item.text_changed:
           item.update_input_text(self)
           item.text_changed = False
+        if item.color_changed:
+          item.update_text_color(self)
+          item.update_background(self)
+          item.color_changed = False
     
   def log_request_error(self, resp : simpleobsws.RequestResponse) -> None:
     try:

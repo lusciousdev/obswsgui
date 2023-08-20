@@ -77,22 +77,12 @@ class ImageInput(obsobj.OBS_Object):
       self.redraw()
       
   def move_to_front(self, under : int = None) -> None:
-    if self.img_id:
-      if under:
-        self.canvas.tag_raise(self.img_id, under)
-      else:
-        self.canvas.tag_raise(self.img_id)
-        
-    return super().move_to_front(self.img_id)
+    last_id = self.move_id_to_front(self.img_id, under)
+    return super().move_to_front(last_id)
   
   def move_to_back(self, above : int = None) -> None:
-    if self.img_id:
-      if above:
-        self.canvas.tag_lower(self.img_id, above)
-      else:
-        self.canvas.tag_lower(self.img_id)
-        
-    return super().move_to_back(self.img_id)
+    last_id = self.move_id_to_back(self.img_id, above)
+    return super().move_to_back(last_id)
     
   def queue_update_req(self, gui : 'owg.OBS_WS_GUI') -> None:
     newname = self.modify_name_strvar.get()

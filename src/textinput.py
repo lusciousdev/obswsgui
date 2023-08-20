@@ -26,14 +26,17 @@ def strfdelta(tdelta, fmt):
 
 class TextInput(obsobj.OBS_Object):
   text = ""
+  text_changed = False
   text_id = None
   
   text_font = None
   
   vertical = False
-  color = "#fff"
   
-  text_changed = False
+  color = "#fff"
+  bk_color = "#000"
+  bk_enabled = False
+  color_changed = False
   
   modify_text_strvar = None
   
@@ -91,10 +94,34 @@ class TextInput(obsobj.OBS_Object):
       
       self.text_changed |= local
       
-  def set_color(self, color : str) -> None:
+  def set_color(self, color : str, local = True) -> None:
     if self.color != color:
       self.color = color
       self.canvas.itemconfigure(self.text_id, fill = self.color)
+      
+      self.color_changed |= local
+      
+  def set_background_color(self, bk_color : str, local = True) -> None:
+    if self.bk_color != bk_color:
+      self.bk_color = bk_color
+      
+      if self.bk_enabled:
+        self.canvas.itemconfigure(self.rect_id, fill = self.bk_color)
+      else:
+        self.canvas.itemconfigure(self.rect_id, fill = "")
+      
+      self.color_changed |= local
+      
+  def toggle_background(self, bk_enable : str, local = True) -> None:
+    if self.bk_enabled != bk_enable:
+      self.bk_enabled = bk_enable
+      
+      if self.bk_enabled:
+        self.canvas.itemconfigure(self.rect_id, fill = self.bk_color)
+      else:
+        self.canvas.itemconfigure(self.rect_id, fill = "")
+      
+      self.color_changed |= local
       
   def set_vertical(self, vertical : bool) -> None:
     if self.vertical != vertical:
@@ -102,22 +129,12 @@ class TextInput(obsobj.OBS_Object):
       self.canvas.itemconfigure(self.text_id, angle = 0 if not self.vertical else 270, anchor = tk.CENTER)
       
   def move_to_front(self, under : int = None) -> None:
-    if self.text_id:
-      if under:
-        self.canvas.tag_raise(self.text_id, under)
-      else:
-        self.canvas.tag_raise(self.text_id)
-        
-    return super().move_to_front(self.text_id)
+    last_id = self.move_id_to_front(self.text_id, under)
+    return super().move_to_front(last_id)
   
   def move_to_back(self, above : int = None) -> None:
-    if self.text_id:
-      if above:
-        self.canvas.tag_lower(self.text_id, above)
-      else:
-        self.canvas.tag_lower(self.text_id)
-        
-    return super().move_to_back(self.text_id)
+    last_id = self.move_id_to_back(self.text_id, above)
+    return super().move_to_back(last_id)
       
   def redraw(self) -> None:
     super().redraw()
@@ -135,6 +152,12 @@ class TextInput(obsobj.OBS_Object):
   def update_text_color(self, gui : 'owg.OBS_WS_GUI', color : str = None):
     c = self.color if not color else color
     req = simpleobsws.Request('SetInputSettings', { 'inputName': self.source_name, 'inputSettings': { 'color': miscutil.color_to_obs(c) }})
+    gui.connection.queue_request(req)
+    
+  def update_background(self, gui : 'owg.OBS_WS_GUI', color : str = None):
+    c = self.bk_color if not color else color
+    o = 100 if self.bk_enabled else 0
+    req = simpleobsws.Request('SetInputSettings', { 'inputName': self.source_name, 'inputSettings': { 'bk_color': miscutil.color_to_obs(c), 'bk_opacity': o }})
     gui.connection.queue_request(req)
       
   def queue_update_req(self, gui : 'owg.OBS_WS_GUI') -> None:
@@ -186,6 +209,21 @@ class TextInput(obsobj.OBS_Object):
     
     return row
   
+  def setup_background_toggle(self, gui : 'owg.OBS_WS_GUI', frame : tk.Frame, row : int = 0) -> int:
+    self.background_toggle_frame = ttk.Frame(frame, padding = "0 0 0 10")
+    self.background_toggle_frame.grid(column = 0, row = row, sticky = (tk.W, tk.E))
+    self.background_toggle_frame.columnconfigure(1, weight = 1)
+    row += 1
+    
+    self.background_toggle_label = ttk.Label(self.background_toggle_frame, text = "Background? ")
+    self.background_toggle_label.grid(column = 0, row = 0, sticky = tk.W)
+    
+    self.background_toggle_boolvar = tk.BooleanVar(frame, self.bk_enabled)
+    self.background_toggle_checkbox = tk.Checkbutton(self.background_toggle_frame, offvalue = False, onvalue = True, variable = self.background_toggle_boolvar, command = lambda: self.toggle_background(self.background_toggle_boolvar.get()), bg = gui.background_color, activebackground = gui.background_button)
+    self.background_toggle_checkbox.grid(column = 1, row = 0, sticky = tk.W)
+    
+    return row
+  
   def setup_modify_ui(self, gui : 'owg.OBS_WS_GUI') -> None:
     super().setup_modify_ui(gui)
     row = 0
@@ -194,7 +232,9 @@ class TextInput(obsobj.OBS_Object):
     row = self.setup_modify_text(gui, gui.modifyframe, row)
     row = self.setup_counter_buttons(gui, gui.modifyframe, row)
     row = self.setup_update_button(gui, gui.modifyframe, row)
-    row = self.setup_color_picker(gui, gui.modifyframe, lambda s: self.update_text_color(gui, s), row)
+    row = self.setup_color_picker(gui, gui.modifyframe, "Color: ", lambda s: self.set_color(s), row)
+    row = self.setup_color_picker(gui, gui.modifyframe, "Background: ", lambda s: self.set_background_color(s), row)
+    row = self.setup_background_toggle(gui, gui.modifyframe, row)
     row = self.setup_standard_buttons(gui, gui.modifyframe, row)
     
     self.adjust_modify_ui(gui, self.modify_text_strvar.get())
@@ -257,7 +297,9 @@ class TimerInput(TextInput):
     row = self.setup_modify_name(gui, gui.modifyframe, row)
     row = self.setup_timer_buttons(gui, gui.modifyframe, row)
     row = self.setup_update_button(gui, gui.modifyframe, row)
-    row = self.setup_color_picker(gui, gui.modifyframe, lambda s: self.update_text_color(gui, s), row)
+    row = self.setup_color_picker(gui, gui.modifyframe, "Color: ", lambda s: self.update_text_color(gui, s), row)
+    row = self.setup_color_picker(gui, gui.modifyframe, "Outline: ", lambda s: self.update_background(gui, s), row)
+    row = self.setup_background_toggle(gui, gui.modifyframe, row)
     row = self.setup_standard_buttons(gui, gui.modifyframe, row)
   
 class CountdownInput(TextInput):
@@ -307,7 +349,9 @@ class CountdownInput(TextInput):
     row = self.setup_modify_name(gui, gui.modifyframe, row)
     row = self.setup_modify_end(gui, gui.modifyframe, row)
     row = self.setup_update_button(gui, gui.modifyframe, row)
-    row = self.setup_color_picker(gui, gui.modifyframe, lambda s: self.update_text_color(gui, s), row)
+    row = self.setup_color_picker(gui, gui.modifyframe, "Color: ", lambda s: self.update_text_color(gui, s), row)
+    row = self.setup_color_picker(gui, gui.modifyframe, "Outline: ", lambda s: self.update_background(gui, s), row)
+    row = self.setup_background_toggle(gui, gui.modifyframe, row)
     row = self.setup_standard_buttons(gui, gui.modifyframe, row)
 
 import obswsgui as owg
