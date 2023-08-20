@@ -37,6 +37,7 @@ class ProxiedServerConnection(conn.Connection):
     
     try:
       self.proxyws = await client.connect(self.proxy_url)
+      self.connected = True
       
       joincontent = {
         'code': self.roomcode,
@@ -50,57 +51,44 @@ class ProxiedServerConnection(conn.Connection):
       respjson = json.loads(resp)
       if respjson['status_code'] >= 400:
         logging.error(f"Error {respjson['status_code']}: {respjson['message']}")
-        return False
+        self.connected = False
       
+      return self.connected
     except wsexceptions.InvalidURI:
       logging.error("Invalid URI.")
-      return False
+      self.connected = False
     except OSError:
       logging.error("TCP connection failed.")
-      return False
+      self.connected = False
     except wsexceptions.InvalidHandshake:
       logging.error("Handshake failed.")
-      return False
+      self.connected = False
     except asyncio.TimeoutError:
       logging.error("Handshake timed out")
-      return False
+      self.connected = False
     except wsexceptions.ConnectionClosed:
       logging.error("Connection closed.")
-      return False
+      self.connected = False
     except:
       logging.error("Unknown error encountered while connecting.")
-      return False
-    
+      self.connected = False
+      
     if connected and identified:
       logging.info(f"Connected to {self.url} and room created.")
-      return True
+      self.connected = True
     else:
       logging.error(f"Failed to authenticate with {self.url}")
-      return False
+      self.connected = False
     
-  def send_response(self, resp : simpleobsws.RequestResponse) -> None:
-    endpoint = f"{self.proxy_url}/api/v1/response"
-    
-    content = {
-      'roomCode': self.roomcode,
-      'requestType': resp.requestType,
-      'requestStatus': {
-        'code': resp.requestStatus.code,
-        'comment': resp.requestStatus.comment,
-        'result': resp.requestStatus.result
-      },
-      'responseData': resp.responseData
-    }
-    
-    postresp = requests.post(url = endpoint, json = content)
-    
-    if postresp.status_code != 200:
-      self.log_requests_response(postresp)
+    return self.connected
     
   async def update(self):
     while True:
       try:
         msg = await asyncio.wait_for(self.proxyws.recv(), 0.05)
+      except wsexceptions.ConnectionClosed:
+        self.connected = False
+        break
       except:
         break
       
@@ -130,7 +118,6 @@ class ProxiedServerConnection(conn.Connection):
         if msgjson['requestType'] == 'emit':
           req = simpleobsws.Request(msgjson['request']['requestType'], msgjson['request']['requestData'])
           await self.obsws.emit(req)
-          
     
   async def request(self, req : simpleobsws.Request) -> simpleobsws.RequestResponse:
     None

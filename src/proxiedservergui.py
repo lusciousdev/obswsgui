@@ -122,6 +122,9 @@ class ProxiedServerClient:
         self.set_conn_ui_state(False, "Failed to connect. Retry?")
     if self.connected:      
       await self.connection.update()
+      
+      if not self.connection.connected:
+        self.reset_to_connection_ui()
     
   def clear_root(self) -> None:
     for ele in self.root.winfo_children():
@@ -133,12 +136,13 @@ class ProxiedServerClient:
     
     self.websocket_frame = ttk.Frame(self.connframe, padding = "2 2 2 2")
     self.websocket_frame.grid(column = 0, row = 0, sticky = (tk.N, tk.W, tk.E))
+    self.websocket_frame.columnconfigure(0, weight = 1)
     
-    self.ip_addr_label = ttk.Label(self.websocket_frame, text = "OBS WebSocket IP Address:Port/URL", style="Large.TLabel")
-    self.ip_addr_label.grid(column = 0, columnspan=2, row = 0, sticky = tk.W)
+    self.ip_addr_label = ttk.Label(self.websocket_frame, text = "OBS WebSocket address", style="Large.TLabel")
+    self.ip_addr_label.grid(column = 0, row = 0, sticky = tk.W)
     
     self.ws_ip_addr_entry = ttk.Entry(self.websocket_frame, textvariable = self.ws_addr_strvar, width = 25, **self.largefontopt)
-    self.ws_ip_addr_entry.grid(column = 0, columnspan=2, row = 1, sticky = (tk.W, tk.E))
+    self.ws_ip_addr_entry.grid(column = 0, row = 1, sticky = (tk.W, tk.E))
     
     self.websocket_pw_frame = ttk.Frame(self.connframe, padding = "2 2 2 2")
     self.websocket_pw_frame.grid(column = 0, row = 1, sticky = (tk.S, tk.W, tk.E))
@@ -151,8 +155,9 @@ class ProxiedServerClient:
     
     self.proxy_frame = ttk.Frame(self.connframe, padding = "2 2 2 2")
     self.proxy_frame.grid(column = 0, row = 2, sticky = (tk.N, tk.W, tk.E))
+    self.proxy_frame.columnconfigure(0, weight = 1)
     
-    self.proxy_ip_addr_label = ttk.Label(self.proxy_frame, text = "Proxy server IP Address:Port/URL", style="Large.TLabel")
+    self.proxy_ip_addr_label = ttk.Label(self.proxy_frame, text = "Proxy server address", style="Large.TLabel")
     self.proxy_ip_addr_label.grid(column = 0, columnspan=2, row = 0, sticky = tk.W)
     
     self.proxy_ip_addr_entry = ttk.Entry(self.proxy_frame, textvariable = self.proxy_addr_strvar, width = 25, **self.largefontopt)
@@ -178,6 +183,12 @@ class ProxiedServerClient:
     self.proxy_ip_addr_entry['state'] = state
     self.proxy_pw_entry['state'] = state
     self.conn_submit['state'] = state
+      
+  def reset_to_connection_ui(self) -> None:
+      self.connected = False
+      self.ready_to_connect = False
+      self.clear_root()
+      self.setup_connection_ui()
     
   def start_connection_attempt(self) -> None:
     self.set_conn_ui_state(True, "Attempting connection...")
@@ -201,6 +212,10 @@ class ProxiedServerClient:
       return False
     
     return True
+  
+  def copy_proxy_url(self):
+    self.root.clipboard_clear()
+    self.root.clipboard_append(self.connection.proxy_url)
     
   def copy_room_code(self):
     self.root.clipboard_clear()
@@ -208,11 +223,13 @@ class ProxiedServerClient:
     
   def setup_default_ui(self) -> None:
     self.defaultframe = ttk.Frame(self.root, padding = "5 5 5 5")
-    self.defaultframe.pack(anchor = tk.CENTER, fill = tk.BOTH, expand = True)
-    self.defaultframe.columnconfigure(0, weight = 1)
+    self.defaultframe.place(relx = 0.5, rely = 0.5, anchor = tk.CENTER)
+    
+    self.copy_proxy_url_button = ttk.Button(self.defaultframe, text = "Copy proxy URL.", command = self.copy_proxy_url, style = "Huge.TButton")
+    self.copy_proxy_url_button.grid(column = 0, row = 0, pady = (10, 10))
     
     self.copy_roomcode_button = ttk.Button(self.defaultframe, text = "Copy room code.", command = self.copy_room_code, style = "Huge.TButton")
-    self.copy_roomcode_button.pack(anchor = tk.CENTER)
+    self.copy_roomcode_button.grid(column = 0, row = 1, pady = (10, 10))
     
 if __name__ == '__main__':
   root = tk.Tk()

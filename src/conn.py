@@ -11,6 +11,8 @@ class Connection:
   error_handler : RequestResponseHandler = None
   unknown_handler : RequestResponseHandler = None
   
+  connected : bool = False
+  
   def __init__(self, error_handler : RequestResponseHandler):
     self.error_handler = error_handler
     

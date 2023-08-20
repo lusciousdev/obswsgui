@@ -33,15 +33,26 @@ class TextInput(obsobj.OBS_Object):
   vertical = False
   color = "#fff"
   
+  text_changed = False
+  
+  modify_text_strvar = None
+  
   def __init__(self, scene_item_id : int, scene_item_index : int, canvas : tk.Canvas, screen, x : float, y : float, width : float, height : float, rotation : float, source_width : float, source_height : float, bounds_type : str, label : str = "", interactable : bool = True):
     self.text_font = font.Font(family="Helvetica", size = 1)
     super().__init__(scene_item_id, scene_item_index, canvas, screen, x, y, width, height, rotation, source_width, source_height, bounds_type, label, interactable)
-    self.text_id = self.canvas.create_text((self.polygon.point(0).x + self.polygon.point(2).x) / 2.0, (self.polygon.point(0).y + self.polygon.point(2).y) / 2.0, fill = self.default_color, text = self.text, font = self.text_font, anchor = tk.CENTER)
+    self.text_id = self.canvas.create_text((self.polygon.point(0).x + self.polygon.point(2).x) / 2.0, (self.polygon.point(0).y + self.polygon.point(2).y) / 2.0, fill = self.color, text = self.text, font = self.text_font, anchor = tk.CENTER)
     
   def remove_from_canvas(self) -> None:
     if self.text_id:
       self.canvas.delete(self.text_id)
+      self.text_id = None
     return super().remove_from_canvas()
+  
+  def add_to_canvas(self) -> None:
+    super().add_to_canvas()
+    if self.text_id is None:
+      self.text_id = self.canvas.create_text((self.polygon.point(0).x + self.polygon.point(2).x) / 2.0, (self.polygon.point(0).y + self.polygon.point(2).y) / 2.0, fill = self.color, text = self.text, font = self.text_font, anchor = tk.CENTER)
+      
   
   def get_font_size(self) -> None:
     text_height = self.text_font.metrics('linespace')
@@ -66,10 +77,19 @@ class TextInput(obsobj.OBS_Object):
       text_height = self.text_font.metrics('linespace')
       text_width = self.text_font.measure(self.text)
     
-  def set_text(self, text : str) -> None:
+  def set_text(self, text : str, local : bool = True) -> None:
+    if self.text_changed and not local:
+      # ignore network updates while we are still waiting to send our state
+      return
+    
     if self.text != text:
       self.text = text
+      if self.modify_text_strvar:
+        self.modify_text_strvar.set(self.text)
+        
       self.canvas.itemconfigure(self.text_id, text = self.text)
+      
+      self.text_changed |= local
       
   def set_color(self, color : str) -> None:
     if self.color != color:
@@ -81,7 +101,7 @@ class TextInput(obsobj.OBS_Object):
       self.vertical = vertical
       self.canvas.itemconfigure(self.text_id, angle = 0 if not self.vertical else 270, anchor = tk.CENTER)
       
-  def move_to_front(self, under : obsobj.OBS_Object = None) -> None:
+  def move_to_front(self, under : int = None) -> None:
     if self.text_id:
       if under:
         self.canvas.tag_raise(self.text_id, under)
@@ -89,6 +109,15 @@ class TextInput(obsobj.OBS_Object):
         self.canvas.tag_raise(self.text_id)
         
     return super().move_to_front(self.text_id)
+  
+  def move_to_back(self, above : int = None) -> None:
+    if self.text_id:
+      if above:
+        self.canvas.tag_lower(self.text_id, above)
+      else:
+        self.canvas.tag_lower(self.text_id)
+        
+    return super().move_to_back(self.text_id)
       
   def redraw(self) -> None:
     super().redraw()
@@ -113,7 +142,6 @@ class TextInput(obsobj.OBS_Object):
     
     if self.text != newtext:
       self.set_text(newtext)
-      self.update_input_text(gui)
     
     return super().queue_update_req(gui)
   
@@ -192,10 +220,6 @@ class TimerInput(TextInput):
     else:
       time_since = dt.datetime.now() - self.start_time
       self.set_text(strfdelta(time_since, self.text_format))
-    
-    if self.last_text != self.text:
-      self.update_input_text(gui)
-      self.last_text = self.text
       
   def queue_update_req(self, gui : 'owg.OBS_WS_GUI') -> None:
     obsobj.OBS_Object.queue_update_req(self, gui)
@@ -247,11 +271,12 @@ class CountdownInput(TextInput):
   
   def update(self, gui : 'owg.OBS_WS_GUI'):
     time_til = self.end_time - dt.datetime.now()
-    self.set_text(strfdelta(time_til, self.text_format))
     
-    if self.last_text != self.text:
-      self.update_input_text(gui)
-      self.last_text = self.text
+    if time_til.total_seconds() > 0:
+      self.set_text(strfdelta(time_til, self.text_format))
+    else:
+      time_til = dt.timedelta(seconds = 0)
+      self.set_text(strfdelta(time_til, self.text_format))
       
   def queue_update_req(self, gui : 'owg.OBS_WS_GUI') -> None:
     newend = self.modify_end_strvar.get()
@@ -276,7 +301,7 @@ class CountdownInput(TextInput):
     return row
   
   def setup_modify_ui(self, gui : 'owg.OBS_WS_GUI') -> None:
-    super().setup_modify_ui(gui)
+    obsobj.OBS_Object.setup_modify_ui(self, gui)
     
     row = 0
     row = self.setup_modify_name(gui, gui.modifyframe, row)

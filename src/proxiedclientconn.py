@@ -38,6 +38,7 @@ class ProxiedClientConnection(conn.Connection):
   async def connect(self) -> bool:
     try:
       self.proxyws = await client.connect(self.url)
+      self.connected = True
       
       joincontent = {
         'code': self.roomcode,
@@ -50,33 +51,38 @@ class ProxiedClientConnection(conn.Connection):
       respjson = json.loads(resp)
       if respjson['status_code'] >= 400:
         logging.error(f"Error {respjson['status_code']}: {respjson['message']}")
-        return False
+        self.connected = False
       
-      return True
+      return self.connected
     except wsexceptions.InvalidURI:
       logging.error("Invalid URI.")
-      return False
+      self.connected = False
     except OSError:
       logging.error("TCP connection failed.")
-      return False
+      self.connected = False
     except wsexceptions.InvalidHandshake:
       logging.error("Handshake failed.")
-      return False
+      self.connected = False
     except asyncio.TimeoutError:
       logging.error("Handshake timed out")
-      return False
+      self.connected = False
     except wsexceptions.ConnectionClosed:
       logging.error("Connection closed.")
-      return False
+      self.connected = False
     except:
       logging.error("Unknow error encountered while connecting.")
-      return False
+      self.connected = False
+      
+    return self.connected
     
     
   async def update(self) -> None:
     while True:
       try: # assume messages in buffer are responses from emitted requests
         await asyncio.wait_for(self.proxyws.recv(), 0.001)
+      except wsexceptions.ConnectionClosed:
+        self.connected = False
+        break
       except:
         break
         
@@ -85,16 +91,25 @@ class ProxiedClientConnection(conn.Connection):
       
       await self.proxyws.send(json.dumps(content))
       
-      resp = await self.proxyws.recv()
-      respjson = json.loads(resp)
-      if respjson['status_code'] >= 400:
-        logging.error(f"Error {respjson['status_code']}: {respjson['message']}")
+      try:
+        resp = await self.proxyws.recv()
+        respjson = json.loads(resp)
+        if respjson['status_code'] >= 400:
+          logging.error(f"Error {respjson['status_code']}: {respjson['message']}")
+      except wsexceptions.ConnectionClosed:
+        logging.error("Connection closed.")
+        self.connected = False
+        return
+      except:
+        logging.error("Unknown error while waiting for response.")
+        return
         
     self.request_queue.clear()
     
   async def await_response(self, request_id : int) -> dict:
-    while True:
+    while True:  
       msg = await self.proxyws.recv()
+      
       msgjson = json.loads(msg)
       
       if 'requestId' in msgjson:
@@ -106,11 +121,26 @@ class ProxiedClientConnection(conn.Connection):
         continue
       
   async def request(self, req : simpleobsws.Request) -> simpleobsws.RequestResponse:
-    content = self.request_to_json('await_request', req)
-      
-    await self.proxyws.send(json.dumps(content))
+    if not self.connected:
+      return None
     
-    resp = await self.proxyws.recv()
+    content = self.request_to_json('await_request', req)
+    
+    try:
+      await self.proxyws.send(json.dumps(content))
+      
+      resp = await self.proxyws.recv()
+    except wsexceptions.ConnectionClosed:
+      logging.error("Connection closed.")
+      self.connected = False
+      return None
+    except:
+      logging.error("Unknown error while awaiting response.")
+      return None
+    
+    if not resp:
+      return None
+    
     respjson = json.loads(resp)
     if respjson['status_code'] >= 400:
       logging.error(f"Error {respjson['status_code']}: {respjson['message']}")
@@ -125,9 +155,11 @@ class ProxiedClientConnection(conn.Connection):
         return simpleobsws.RequestResponse(respjson['requestType'], status, respjson['responseData'])
       except asyncio.TimeoutError:
         logging.error("Never recieved awaited request response!")
+        self.connected = False
         return None
       except wsexceptions.ConnectionClosed:
         logging.error('Connection closed!')
+        self.connected = False
         return None
       except:
         logging.error('Unknown error occurred when awaiting response.')
