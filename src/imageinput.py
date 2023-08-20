@@ -21,6 +21,12 @@ class ImageInput(obsobj.OBS_Object):
     super().remove_from_canvas()
     if self.img_id:
       self.canvas.delete(self.img_id)
+      self.img_id = None
+      
+  def add_to_canvas(self) -> None:
+    super().add_to_canvas()
+    if self.img_id is None:
+      self.img_id = self.canvas.create_image(0, 0, image = self.tk_img, anchor = tk.NW)
   
   def redraw(self) -> None:
     super().redraw()

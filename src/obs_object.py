@@ -130,15 +130,41 @@ class OBS_Object:
   def remove_from_canvas(self) -> None:
     if self.rect_id:
       self.canvas.delete(self.rect_id)
+      self.rect_id = None
     if self.grabber_ids:
       for id in self.grabber_ids:
         self.canvas.delete(id)
+      self.grabber_ids = None
     if self.item_label_id:
       self.canvas.delete(self.item_label_id)
+      self.item_label_id = None
     if self.rotator_grabber_id:
       self.canvas.delete(self.rotator_grabber_id)
+      self.rotator_grabber_id = None
     if self.rotator_line_id:
       self.canvas.delete(self.rotator_line_id)
+      self.rotator_line_id = None
+      
+  def add_to_canvas(self) -> None:
+    if self.rect_id is None:
+      self.rect_id = self.canvas.create_polygon(self.polygon.to_array(), width = self.line_width, outline = self.default_color, fill = '')
+    
+    if self.interactable:
+      if self.grabber_ids is None:
+        tl = self.canvas.create_oval(0, 0, 0, 0, width = self.line_width, outline = "", fill = self.default_color)
+        bl = self.canvas.create_oval(0, 0, 0, 0, width = self.line_width, outline = "", fill = self.default_color)
+        tr = self.canvas.create_oval(0, 0, 0, 0, width = self.line_width, outline = "", fill = self.default_color)
+        br = self.canvas.create_oval(0, 0, 0, 0, width = self.line_width, outline = "", fill = self.default_color)
+        
+        self.grabber_ids = [tl, bl, tr, br]
+        
+      if self.rotator_grabber_id is None:
+        self.rotator_grabber_id = self.canvas.create_oval(0, 0, 0, 0, width = self.line_width, outline = "", fill = self.default_color)
+      if self.rotator_line_id is None:
+        self.rotator_line_id    = self.canvas.create_line(0, 0, 0, 0, width = self.line_width, fill = self.default_color)
+    
+    if self.item_label_id is None:
+      self.item_label_id = self.canvas.create_text(0, 0, anchor = tk.SW, text = f"{self.source_name} ({self.scene_item_id})", fill = self.default_color, angle = 0)
       
   def calculate_canvas_pos(self) -> None:
     self.scale = self.screen.scale
@@ -414,7 +440,7 @@ class OBS_Object:
     gui.modifyframe.columnconfigure(0, weight = 1)
     
   def queue_move_to_front(self, gui : 'owg.OBS_WS_GUI'):
-    index_req = simpleobsws.Request('SetSceneItemIndex', { 'sceneName': gui.current_scene, 'sceneItemId': self.scene_item_id, 'sceneItemIndex': gui.scene_items[0].scene_item_index})
+    index_req = simpleobsws.Request('SetSceneItemIndex', { 'sceneName': gui.current_scene, 'sceneItemId': self.scene_item_id, 'sceneItemIndex': gui.get_current_scene_items()[0].scene_item_index})
     gui.connection.queue_request(index_req)
     
   def queue_duplicate_req(self, gui : 'owg.OBS_WS_GUI'):
