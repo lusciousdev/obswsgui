@@ -12,6 +12,8 @@ from websockets import typing as wstypes
 from websockets import exceptions as wsexceptions
 import typing
 import uuid
+import ssl
+import pathlib
 
 class Room:
   room_host : server.WebSocketServerProtocol = []
@@ -36,6 +38,8 @@ class Message:
       logging.error("Failed to parse message.")
 
 rooms : typing.Dict[str, Room] = {}
+
+ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
 
 def remove_conn_from_rooms(websocket : server.WebSocketServerProtocol):
   for room in rooms:
@@ -134,6 +138,11 @@ async def handler(websocket : server.WebSocketServerProtocol):
       remove_conn_from_rooms(websocket)
       break
       
+      
+async def secure_main(host : str, port : str):
+  async with server.serve(handler, host, port, origins = "*", ssl = ssl_context):
+    await asyncio.Future()
+  
   
 async def main(host : str, port : str):
   async with server.serve(handler, host, port, origins = "*"):
@@ -143,6 +152,16 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser()
   parser.add_argument('--host', '-i', default="127.0.0.1", help="API Host IP")
   parser.add_argument('--port', '-p', type=int, default=8080, help="API Port")
+  parser.add_argument('--ssl', '-s', action = "store_true", help = "Enable SSL.")
+  parser.add_argument('--fullchain', '-f', help = "Path to fullchain.pem")
+  parser.add_argument('--privkey', '-k', help = "Path to the privkey to match fullchain.")
   
   args = parser.parse_args()
-  asyncio.run(main(args.host, args.port))
+  
+  if args.ssl:
+    fullchain = pathlib.Path(args.fullchain)
+    privkey = pathlib.Path(args.privkey)
+    ssl_context.load_cert_chain(fullchain, keyfile = privkey)
+    asyncio.run(secure_main(args.host, args.port))
+  else:
+    asyncio.run(main(args.host, args.port))
