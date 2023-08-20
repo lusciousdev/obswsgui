@@ -310,7 +310,7 @@ class TimerInput(TextInput):
     row = self.setup_timer_buttons(gui, gui.modifyframe, row)
     row = self.setup_update_button(gui, gui.modifyframe, row)
     row = self.setup_color_picker(gui, gui.modifyframe, "Color: ", lambda s: self.update_text_color(gui, s), row)
-    row = self.setup_color_picker(gui, gui.modifyframe, "Outline: ", lambda s: self.update_background(gui, s), row)
+    row = self.setup_color_picker(gui, gui.modifyframe, "Background: ", lambda s: self.update_background(gui, s), row)
     row = self.setup_background_toggle(gui, gui.modifyframe, row)
     row = self.setup_standard_buttons(gui, gui.modifyframe, row)
   
@@ -362,7 +362,7 @@ class CountdownInput(TextInput):
     row = self.setup_modify_end(gui, gui.modifyframe, row)
     row = self.setup_update_button(gui, gui.modifyframe, row)
     row = self.setup_color_picker(gui, gui.modifyframe, "Color: ", lambda s: self.update_text_color(gui, s), row)
-    row = self.setup_color_picker(gui, gui.modifyframe, "Outline: ", lambda s: self.update_background(gui, s), row)
+    row = self.setup_color_picker(gui, gui.modifyframe, "Background: ", lambda s: self.update_background(gui, s), row)
     row = self.setup_background_toggle(gui, gui.modifyframe, row)
     row = self.setup_standard_buttons(gui, gui.modifyframe, row)
 
