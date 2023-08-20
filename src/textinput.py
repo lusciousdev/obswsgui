@@ -95,6 +95,10 @@ class TextInput(obsobj.OBS_Object):
       self.text_changed |= local
       
   def set_color(self, color : str, local = True) -> None:
+    if self.color_changed and not local:
+      # ignore network updates while we are still waiting to send our state
+      return 
+    
     if self.color != color:
       self.color = color
       self.canvas.itemconfigure(self.text_id, fill = self.color)
@@ -102,6 +106,10 @@ class TextInput(obsobj.OBS_Object):
       self.color_changed |= local
       
   def set_background_color(self, bk_color : str, local = True) -> None:
+    if self.color_changed and not local:
+      # ignore network updates while we are still waiting to send our state
+      return 
+    
     if self.bk_color != bk_color:
       self.bk_color = bk_color
       
@@ -113,6 +121,10 @@ class TextInput(obsobj.OBS_Object):
       self.color_changed |= local
       
   def toggle_background(self, bk_enable : str, local = True) -> None:
+    if self.color_changed and not local:
+      # ignore network updates while we are still waiting to send our state
+      return 
+    
     if self.bk_enabled != bk_enable:
       self.bk_enabled = bk_enable
       
