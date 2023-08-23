@@ -1,19 +1,23 @@
-import conn
-import simpleobsws
-import typing
-import logging
 import asyncio
-from websockets import client
-from websockets import typing as wstypes
-from websockets import exceptions as wsexceptions
 import json
+import logging
 import time
+import typing
+import uuid
+import traceback
+
+import simpleobsws
+from websockets import client
+from websockets import exceptions as wsexceptions
+from websockets import typing as wstypes
+
+import conn
+import proxiedconn as pconn
 
 logging.getLogger("websockets.client").setLevel(logging.INFO)
 
-class ProxiedClientConnection(conn.Connection):
+class ProxiedClientConnection(pconn.ProxiedConnection):
   roomcode : str = ""
-  proxyws : client.WebSocketClientProtocol = None
   
   def __init__(self, url : str, roomcode : str, error_handler : conn.RequestResponseHandler):
     self.url = url
@@ -21,38 +25,35 @@ class ProxiedClientConnection(conn.Connection):
     
     super().__init__(error_handler)
     
-  def request_to_json(self, msgType : str, req : simpleobsws.Request):
-    content = {
-      'code': self.roomcode,
-      'msgType': msgType,
-      'hasData': True,
-      'data' : {
-        'requestType': req.requestType,
-        'requestData': req.requestData
-      }
+  def request_to_message(self, msgType : str, req : simpleobsws.Request) -> pconn.Message:
+    msg = pconn.Message()
+    msg.code = self.roomcode
+    msg.id = uuid.uuid4().int
+    msg.msg_type = msgType
+    msg.has_data = True
+    msg.data = {
+      'requestType': req.requestType,
+      'requestData': req.requestData
     }
-    if req.inputVariables:
-      content['data']['inputVariables'] = req.inputVariables
-    if req.outputVariables:
-      content['data']['outputVariables'] = req.outputVariables
-    return content
+    
+    return msg
   
   async def connect(self) -> bool:
     try:
       self.proxyws = await client.connect(self.url)
       self.connected = True
       
-      joincontent = {
-        'code': self.roomcode,
-        'msgType': 'client_subscribe',
-        'hasData': False
-      }
-      await self.proxyws.send(json.dumps(joincontent))
+      msg = pconn.Message()
+      msg.code = self.roomcode
+      msg.id = uuid.uuid4().int
+      msg.msg_type = 'client_subscribe'
+      msg.has_data = False
+      msg.data = {}
       
-      resp = await self.proxyws.recv()
-      respjson = json.loads(resp)
-      if respjson['status_code'] >= 400:
-        logging.error(f"Error {respjson['status_code']}: {respjson['message']}")
+      resp = await self.send_message(msg, self.timeout)
+      
+      if resp and resp.data['status_code'] >= 400:
+        logging.error(f"Error {resp.data['status_code']}: {resp.data['message']}")
         self.connected = False
       
       return self.connected
@@ -87,74 +88,37 @@ class ProxiedClientConnection(conn.Connection):
         break
       except:
         break
-        
+      
     for req in self.request_queue:
-      content = self.request_to_json('emit_request', req)
+      msg = self.request_to_message('emit_request', req)
       
-      await self.proxyws.send(json.dumps(content))
+      resp = await self.send_message(msg, self.timeout)
       
-      try:
-        resp = await self.proxyws.recv()
-        respjson = json.loads(resp)
-        if respjson['status_code'] >= 400:
-          logging.error(f"Error {respjson['status_code']}: {respjson['message']}")
-      except wsexceptions.ConnectionClosed:
-        logging.error("Connection closed.")
-        self.connected = False
-        return
-      except:
-        logging.error("Unknown error while waiting for response.")
-        return
+      if resp and resp.data['status_code'] >= 400:
+        logging.error(f"Error {resp.data['status_code']}: {resp.data['message']}")
         
     self.request_queue.clear()
-    
-  async def await_response(self, request_id : int) -> dict:
-    while True:  
-      msg = await self.proxyws.recv()
-      
-      msgjson = json.loads(msg)
-      
-      if 'requestId' in msgjson:
-        if int(msgjson['requestId']) == request_id:
-          return msgjson
-        else:
-          continue
-      else:
-        continue
       
   async def request(self, req : simpleobsws.Request) -> simpleobsws.RequestResponse:
     if not self.connected:
       return None
     
-    content = self.request_to_json('await_request', req)
+    msg = self.request_to_message('await_request', req)
     
-    try:
-      await self.proxyws.send(json.dumps(content))
-      
-      resp = await self.proxyws.recv()
-    except wsexceptions.ConnectionClosed:
-      logging.error("Connection closed.")
-      self.connected = False
-      return None
-    except:
-      logging.error("Unknown error while awaiting response.")
-      return None
+    resp = await self.send_message(msg, self.timeout)
     
     if not resp:
       return None
     
-    respjson = json.loads(resp)
-    if respjson['status_code'] >= 400:
-      logging.error(f"Error {respjson['status_code']}: {respjson['message']}")
+    if resp.data['status_code'] >= 400:
+      logging.error(f"Error {resp.data['status_code']}: {resp.data['message']}")
       return None
     else:
-      request_id = int(respjson['message'])
-      
       try:
-        respjson = await asyncio.wait_for(self.await_response(request_id), 5.0)
-        statusobj = respjson['requestStatus']
+        resp = await asyncio.wait_for(self.await_response(msg.id), 5.0)
+        statusobj = resp.data['requestStatus']
         status = simpleobsws.RequestStatus(statusobj['result'], statusobj['code'], statusobj['comment'])
-        return simpleobsws.RequestResponse(respjson['requestType'], status, respjson['responseData'])
+        return simpleobsws.RequestResponse(resp.data['requestType'], status, resp.data['responseData'])
       except asyncio.TimeoutError:
         logging.error("Never recieved awaited request response!")
         self.connected = False
