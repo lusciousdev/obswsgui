@@ -15,7 +15,7 @@ import uuid
 import ssl
 import pathlib
 
-from proxyutil import *
+from proxiedconn import Message
 
 class Room:
   room_host : server.WebSocketServerProtocol = []

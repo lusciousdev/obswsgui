@@ -13,7 +13,6 @@ from websockets import typing as wstypes
 
 import conn
 import proxiedconn as pconn
-from proxyutil import *
 
 logging.getLogger("websockets.client").setLevel(logging.INFO)
 
@@ -51,7 +50,7 @@ class ProxiedServerConnection(pconn.ProxiedConnection):
         'msgType': 'server_subscribe',
         'hasData': False
       }
-      msg = Message()
+      msg = pconn.Message()
       msg.code = self.roomcode
       msg.id = uuid.uuid4().int
       msg.msg_type = "server_subscribe"
@@ -106,13 +105,13 @@ class ProxiedServerConnection(pconn.ProxiedConnection):
       except:
         break
       
-      msg = Message(rawmsg)
+      msg = pconn.Message(rawmsg)
       
       if msg.msg_type == 'await_request':
         req = simpleobsws.Request(msg.data['requestType'], msg.data['requestData'])
         obs_resp = await self.obsws.call(req)
         
-        await_resp = Message()
+        await_resp = pconn.Message()
         await_resp.code = self.roomcode
         await_resp.id = msg.id
         await_resp.msg_type = 'await_response'

@@ -13,7 +13,6 @@ from websockets import typing as wstypes
 
 import conn
 import proxiedconn as pconn
-from proxyutil import *
 
 logging.getLogger("websockets.client").setLevel(logging.INFO)
 
@@ -26,8 +25,8 @@ class ProxiedClientConnection(pconn.ProxiedConnection):
     
     super().__init__(error_handler)
     
-  def request_to_message(self, msgType : str, req : simpleobsws.Request) -> Message:
-    msg = Message()
+  def request_to_message(self, msgType : str, req : simpleobsws.Request) -> pconn.Message:
+    msg = pconn.Message()
     msg.code = self.roomcode
     msg.id = uuid.uuid4().int
     msg.msg_type = msgType
@@ -44,7 +43,7 @@ class ProxiedClientConnection(pconn.ProxiedConnection):
       self.proxyws = await client.connect(self.url)
       self.connected = True
       
-      msg = Message()
+      msg = pconn.Message()
       msg.code = self.roomcode
       msg.id = uuid.uuid4().int
       msg.msg_type = 'client_subscribe'
