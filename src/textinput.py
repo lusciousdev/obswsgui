@@ -33,8 +33,8 @@ class TextInput(obsobj.OBS_Object):
   
   vertical = False
   
-  color = "#fff"
-  bk_color = "#000"
+  color = "#ffffff"
+  bk_color = "#000000"
   bk_enabled = False
   color_changed = False
   

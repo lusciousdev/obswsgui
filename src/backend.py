@@ -15,27 +15,11 @@ import uuid
 import ssl
 import pathlib
 
+from proxyutil import *
+
 class Room:
   room_host : server.WebSocketServerProtocol = []
   clients : typing.List[server.WebSocketServerProtocol] = []
-  
-class Message:
-  code : str = None
-  msg_type : str = None
-  hasData : bool = False
-  data : dict = None
-  
-  def __init__(self, data : wstypes.Data):
-    try:
-      datajson = json.loads(data)
-      
-      self.code = datajson['code']
-      self.msg_type = datajson['msgType']
-      self.hasData = datajson['hasData']
-      if self.hasData:
-        self.data = datajson['data']
-    except:
-      logging.error("Failed to parse message.")
 
 rooms : typing.Dict[str, Room] = {}
 
@@ -48,9 +32,15 @@ def remove_conn_from_rooms(websocket : server.WebSocketServerProtocol):
     if websocket in rooms[room].clients:
       rooms[room].clients.remove(websocket)
     
-async def send_status_response(websocket : server.WebSocketServerProtocol, status_code : int, message : str) -> None:
+async def send_status_response(websocket : server.WebSocketServerProtocol, code : str, id : int, status_code : int, message : str) -> None:
   try:
-    await websocket.send(json.dumps({'status_code': status_code, 'message': message}))
+    msg = Message()
+    msg.code = code
+    msg.id = id
+    msg.msg_type = "status_response"
+    msg.has_data = True
+    msg.data = { 'status_code': status_code, 'message': message }
+    await websocket.send(msg.to_data())
   except wsexceptions.ConnectionClosed as e:
     remove_conn_from_rooms(websocket)
     
@@ -65,66 +55,54 @@ async def process_message(websocket : server.WebSocketServerProtocol, rawmsg : w
       rooms[msg.code] = Room()
     if not rooms[msg.code].room_host:
       rooms[msg.code].room_host = websocket
-      await send_status_response(websocket, 200, f"Joined room \"{msg.code}\" as host.")
+      await send_status_response(websocket, msg.code, msg.id, 200, f"Joined room \"{msg.code}\" as host.")
       return True
     else:
-      await send_status_response(websocket, 400, "Room already has a host.")
+      await send_status_response(websocket, "", msg.id, 400, "Room already has a host.")
       return False
   elif msg.msg_type == "client_subscribe":
     if msg.code not in rooms:
-      await send_status_response(websocket, 401, "Invalid room code.")
+      await send_status_response(websocket, "", msg.id, 401, "Invalid room code.")
       return False
     if websocket not in rooms[msg.code].clients:
       rooms[msg.code].clients.append(websocket)
-      await send_status_response(websocket, 200, f"Joined room \"{msg.code}\" as client.")
+      await send_status_response(websocket, msg.code, msg.id, 200, f"Joined room \"{msg.code}\" as client.")
       return True
     else:
-      await send_status_response(websocket, 409, f"Already in room \"{msg.code}\" as client.")
+      await send_status_response(websocket, msg.code, msg.id, 409, f"Already in room \"{msg.code}\" as client.")
       return False
   elif msg.msg_type == "await_request":
     if msg.code not in rooms:
-      await send_status_response(websocket, 401, "Invalid room code.")
+      await send_status_response(websocket, "", msg.id, 401, "Invalid room code.")
       return False
     if websocket not in rooms[msg.code].clients:
-      await send_status_response(websocket, 401, f"Invalid room code.")
+      await send_status_response(websocket, "", msg.id, 401, f"Invalid room code.")
       return False
     else:
-      request_id = uuid.uuid4().int
-      content = {
-        'requestType': 'await',
-        'requestId': request_id,
-        'request': msg.data
-      }
-      await rooms[msg.code].room_host.send(json.dumps(content))
-      await send_status_response(websocket, 200, f"{request_id}")
+      await rooms[msg.code].room_host.send(msg.to_data())
+      await send_status_response(websocket, msg.code, msg.id, 200, f"Sent, wait for response.")
   elif msg.msg_type == "await_response":
     if msg.code not in rooms:
-      await send_status_response(websocket, 401, "Invalid room code.")
+      await send_status_response(websocket, "", msg.id, 401, "Invalid room code.")
       return False
     if rooms[msg.code].room_host != websocket:
-      await send_status_response(websocket, 401, "Invalid room code.")
+      await send_status_response(websocket, "", msg.id, 401, "Invalid room code.")
       return False
     else:
       for client in rooms[msg.code].clients:
-        await client.send(json.dumps(msg.data))
-      await send_status_response(websocket, 200, "Broadcasted.")
+        await client.send(msg.to_data())
+      await send_status_response(websocket, msg.code, msg.id, 200, "Broadcasted.")
       return True
   elif msg.msg_type == "emit_request":
     if msg.code not in rooms:
-      await send_status_response(websocket, 401, "Invalid room code.")
+      await send_status_response(websocket, "", msg.id, 401, 401, "Invalid room code.")
       return False
     if websocket not in rooms[msg.code].clients:
-      await send_status_response(websocket, 401, f"Invalid room code.")
+      await send_status_response(websocket, "", msg.id, 401, 401, f"Invalid room code.")
       return False
     else:
-      request_id = uuid.uuid4().int
-      content = {
-        'requestType': 'emit',
-        'requestId': request_id,
-        'request': msg.data
-      }
-      await rooms[msg.code].room_host.send(json.dumps(content))
-      await send_status_response(websocket, 200, "Emitted.")
+      await rooms[msg.code].room_host.send(msg.to_data())
+      await send_status_response(websocket, msg.code, msg.id, 200, "Emitted.")
       return True
       
 
