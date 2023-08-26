@@ -1,9 +1,12 @@
 import tkinter as tk
 
-import geometryutil as geom
-import obs_object as obsobj
+from ..util.geometryutil import (
+  Coords,
+  Polygon
+)
+from .obs_object import OBS_Object
 
-class OutputBounds(obsobj.OBS_Object):
+class OutputBounds(OBS_Object):
   anchor : str = 'center'
   
   def __init__(self, canvas : tk.Canvas, anchor, width : float, height : float, label : str = ""):
@@ -17,7 +20,7 @@ class OutputBounds(obsobj.OBS_Object):
     self.height = height
     self.source_name = label
     
-    self.polygon = geom.Polygon([0, 0], [0, 0], [0, 0], [0, 0])
+    self.polygon = Polygon([0, 0], [0, 0], [0, 0], [0, 0])
     
     self.rect_id = self.canvas.create_polygon(self.polygon.to_array(), width = self.line_width, outline = self.default_color, fill = '')
     self.item_label_id = self.canvas.create_text(0, 0, anchor = tk.SW, text = self.source_name, fill = self.default_color)
@@ -29,16 +32,16 @@ class OutputBounds(obsobj.OBS_Object):
   def redraw(self) -> None:
     lw = self.get_linewidth()
     
-    self.polygon.set_point(0, geom.Coords(0, 0))
+    self.polygon.set_point(0, Coords(0, 0))
     self.wpx = self.width  * self.scale
     self.hpx = self.height * self.scale
     
     if (self.anchor == 'center'):
-      self.polygon.set_point(0, geom.Coords((self.canvas.winfo_width() - self.wpx) / 2, (self.canvas.winfo_height() - self.hpx) / 2))
+      self.polygon.set_point(0, Coords((self.canvas.winfo_width() - self.wpx) / 2, (self.canvas.winfo_height() - self.hpx) / 2))
       
-      self.polygon.set_point(1, geom.Coords(self.polygon.point(0).x + self.wpx, self.polygon.point(0).y))
-      self.polygon.set_point(2, geom.Coords(self.polygon.point(0).x + self.wpx, self.polygon.point(0).y + self.hpx))
-      self.polygon.set_point(3, geom.Coords(self.polygon.point(0).x,            self.polygon.point(0).y + self.hpx))
+      self.polygon.set_point(1, Coords(self.polygon.point(0).x + self.wpx, self.polygon.point(0).y))
+      self.polygon.set_point(2, Coords(self.polygon.point(0).x + self.wpx, self.polygon.point(0).y + self.hpx))
+      self.polygon.set_point(3, Coords(self.polygon.point(0).x,            self.polygon.point(0).y + self.hpx))
     
     self.canvas.coords(self.rect_id, self.polygon.to_array())
     self.canvas.itemconfigure(self.rect_id, width = lw)

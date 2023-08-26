@@ -3,24 +3,20 @@ import logging
 logging.basicConfig(level = logging.INFO)
 
 import asyncio
-import datetime as dt
 import tkinter as tk
-from tkinter import ttk, font
-import typing
-import time
+from tkinter import ttk
 import threading
 import uuid
 
-import simpleobsws
 logging.getLogger("simpleobsws").setLevel(level = logging.INFO)
 
-import proxiedserverconn as psc
+from ..networking.proxiedserverconn import ProxiedServerConnection
 
-class ProxiedServerClient:
+class ProxiedServer_GUI:
   ready_to_connect : bool = False
   connected : bool = False
   
-  connection : psc.ProxiedServerConnection = None
+  connection : ProxiedServerConnection = None
   
   framerate : float = 60.0
   
@@ -206,7 +202,7 @@ class ProxiedServerClient:
     
     self.conn_submit_strvar.set("Attempting to connect...")
     
-    self.connection = psc.ProxiedServerConnection(ws_addr, ws_password, proxy_addr, proxy_code, lambda a: None)
+    self.connection = ProxiedServerConnection(ws_addr, ws_password, proxy_addr, proxy_code, lambda a: None)
     
     self.connected = await self.connection.connect()
     if not self.connected:
@@ -234,7 +230,7 @@ class ProxiedServerClient:
     
 if __name__ == '__main__':
   root = tk.Tk()
-  client = ProxiedServerClient(root)
+  client = ProxiedServer_GUI(root)
   
   _thread = threading.Thread(target=client.start_async_loop, daemon=True)
   _thread.start()
