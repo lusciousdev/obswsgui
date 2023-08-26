@@ -1,3 +1,3 @@
-python -m PyInstaller --onefile --windowed --name obswsgui .\src\main.py
-python -m PyInstaller --onefile --windowed --name proxiedobswsclient .\src\proxiedclientgui.py
-python -m PyInstaller --onefile --windowed --name proxiedobswsserver .\src\proxiedservergui.py
+python -m PyInstaller --onefile --windowed -d all --name obswsgui    .\obswsgui\__main__.py
+python -m PyInstaller --onefile --windowed -d all --name proxyclient .\obswsgui\client.py
+python -m PyInstaller --onefile --windowed -d all --name proxyserver .\obswsgui\server.py

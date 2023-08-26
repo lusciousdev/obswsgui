@@ -7,8 +7,7 @@ from websockets import client
 from websockets import exceptions as wsexceptions
 from websockets import typing as wstypes
 
-import conn
-
+from .conn import Connection
 
 class Message:
   code : str = None
@@ -54,7 +53,7 @@ class Message:
   def to_data(self) -> wstypes.Data:
     return json.dumps(self.to_dict())
 
-class ProxiedConnection(conn.Connection):
+class ProxiedConnection(Connection):
   proxyws : client.WebSocketClientProtocol = None
   timeout = 5.0
   

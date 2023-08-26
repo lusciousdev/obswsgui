@@ -3,11 +3,17 @@ import math
 import tkinter as tk
 from string import Template
 from tkinter import font, ttk
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+  from ..ui.defaultgui import Default_GUI
 
 import simpleobsws
 
-import miscutil
-import obs_object as obsobj
+from ..util.miscutil import (
+  color_to_obs
+)
+from .obs_object import OBS_Object
 
 COUNTDOWN_END_FORMAT = "%Y-%m-%d %H:%M:%S"
 
@@ -24,7 +30,7 @@ def strfdelta(tdelta, fmt):
     t = DeltaTemplate(fmt)
     return t.substitute(**d)
 
-class TextInput(obsobj.OBS_Object):
+class TextInput(OBS_Object):
   text = ""
   text_changed = False
   text_id = None
@@ -157,22 +163,22 @@ class TextInput(obsobj.OBS_Object):
       self.canvas.coords(self.text_id, (self.polygon.point(0).x + self.polygon.point(2).x) / 2.0, (self.polygon.point(0).y + self.polygon.point(2).y) / 2.0)
       self.canvas.itemconfig(self.text_id, font = self.text_font, angle = (-180.0 * self.rotation / math.pi))
       
-  def update_input_text(self, gui : 'owg.OBS_WS_GUI'):
+  def update_input_text(self, gui : 'Default_GUI'):
     req = simpleobsws.Request('SetInputSettings', { 'inputName': self.source_name, 'inputSettings': { 'text': self.text }})
     gui.connection.queue_request(req)
     
-  def update_text_color(self, gui : 'owg.OBS_WS_GUI', color : str = None):
+  def update_text_color(self, gui : 'Default_GUI', color : str = None):
     c = self.color if not color else color
-    req = simpleobsws.Request('SetInputSettings', { 'inputName': self.source_name, 'inputSettings': { 'color': miscutil.color_to_obs(c) }})
+    req = simpleobsws.Request('SetInputSettings', { 'inputName': self.source_name, 'inputSettings': { 'color': color_to_obs(c) }})
     gui.connection.queue_request(req)
     
-  def update_background(self, gui : 'owg.OBS_WS_GUI', color : str = None):
+  def update_background(self, gui : 'Default_GUI', color : str = None):
     c = self.bk_color if not color else color
     o = 100 if self.bk_enabled else 0
-    req = simpleobsws.Request('SetInputSettings', { 'inputName': self.source_name, 'inputSettings': { 'bk_color': miscutil.color_to_obs(c), 'bk_opacity': o }})
+    req = simpleobsws.Request('SetInputSettings', { 'inputName': self.source_name, 'inputSettings': { 'bk_color': color_to_obs(c), 'bk_opacity': o }})
     gui.connection.queue_request(req)
       
-  def queue_update_req(self, gui : 'owg.OBS_WS_GUI') -> None:
+  def queue_update_req(self, gui : 'Default_GUI') -> None:
     newtext = self.modify_text_strvar.get()
     
     if self.text != newtext:
@@ -180,14 +186,14 @@ class TextInput(obsobj.OBS_Object):
     
     return super().queue_update_req(gui)
   
-  def adjust_modify_ui(self, gui : 'owg.OBS_WS_GUI', val : str) -> None:
+  def adjust_modify_ui(self, gui : 'Default_GUI', val : str) -> None:
     if (val.isnumeric()):
       self.counterframe.grid()
     else:
       self.counterframe.grid_remove()
     return True
   
-  def setup_modify_text(self, gui : 'owg.OBS_WS_GUI', frame : tk.Frame, row : int = 0) -> int:
+  def setup_modify_text(self, gui : 'Default_GUI', frame : tk.Frame, row : int = 0) -> int:
     self.modify_text_label = ttk.Label(frame, text = "Text:")
     self.modify_text_label.grid(column = 0, row = row, sticky = tk.W)
     row += 1
@@ -199,7 +205,7 @@ class TextInput(obsobj.OBS_Object):
     
     return row
   
-  def setup_counter_buttons(self, gui : 'owg.OBS_WS_GUI', frame : tk.Frame, row : int = 0) -> int:
+  def setup_counter_buttons(self, gui : 'Default_GUI', frame : tk.Frame, row : int = 0) -> int:
     self.counterframe = ttk.Frame(frame, padding = "0 0 0 10")
     self.counterframe.grid(column = 0, row = row, sticky = (tk.W, tk.E))
     self.counterframe.columnconfigure(0, weight = 1, uniform = "counterbuttons")
@@ -221,7 +227,7 @@ class TextInput(obsobj.OBS_Object):
     
     return row
   
-  def setup_background_toggle(self, gui : 'owg.OBS_WS_GUI', frame : tk.Frame, row : int = 0) -> int:
+  def setup_background_toggle(self, gui : 'Default_GUI', frame : tk.Frame, row : int = 0) -> int:
     self.background_toggle_frame = ttk.Frame(frame, padding = "0 0 0 10")
     self.background_toggle_frame.grid(column = 0, row = row, sticky = (tk.W, tk.E))
     self.background_toggle_frame.columnconfigure(1, weight = 1)
@@ -236,7 +242,7 @@ class TextInput(obsobj.OBS_Object):
     
     return row
   
-  def setup_modify_ui(self, gui : 'owg.OBS_WS_GUI') -> None:
+  def setup_modify_ui(self, gui : 'Default_GUI') -> None:
     super().setup_modify_ui(gui)
     row = 0
     
@@ -264,7 +270,7 @@ class TimerInput(TextInput):
     super().__init__(scene_item_id, scene_item_index, canvas, screen, x, y, width, height, rotation, source_width, source_height, bounds_type, label, interactable)
     self.start_time = start
   
-  def update(self, gui : 'owg.OBS_WS_GUI'):
+  def update(self, gui : 'Default_GUI'):
     if self.paused and self.pause_time:
       time_paused = (dt.datetime.now() - self.pause_time)
       self.start_time += time_paused
@@ -273,8 +279,8 @@ class TimerInput(TextInput):
       time_since = dt.datetime.now() - self.start_time
       self.set_text(strfdelta(time_since, self.text_format))
       
-  def queue_update_req(self, gui : 'owg.OBS_WS_GUI') -> None:
-    obsobj.OBS_Object.queue_update_req(self, gui)
+  def queue_update_req(self, gui : 'Default_GUI') -> None:
+    OBS_Object.queue_update_req(self, gui)
     
   def toggle_pause(self, pause_button : ttk.Button = None):
     if self.paused:
@@ -291,7 +297,7 @@ class TimerInput(TextInput):
   def reset_timer(self):
     self.start_time = dt.datetime.now()
     
-  def setup_timer_buttons(self, gui : 'owg.OBS_WS_GUI', frame : tk.Frame, row : int = 0) -> int:
+  def setup_timer_buttons(self, gui : 'Default_GUI', frame : tk.Frame, row : int = 0) -> int:
     self.pause_button = ttk.Button(frame, text = "Pause", command = lambda: self.toggle_pause(self.pause_button))
     self.pause_button.grid(column = 0, row = row, sticky = (tk.W, tk.E), pady = (0, 5))
     row += 1
@@ -302,8 +308,8 @@ class TimerInput(TextInput):
     
     return row
   
-  def setup_modify_ui(self, gui : 'owg.OBS_WS_GUI') -> None:
-    obsobj.OBS_Object.setup_modify_ui(self, gui)
+  def setup_modify_ui(self, gui : 'Default_GUI') -> None:
+    OBS_Object.setup_modify_ui(self, gui)
     
     row = 0
     row = self.setup_modify_name(gui, gui.modifyframe, row)
@@ -323,7 +329,7 @@ class CountdownInput(TextInput):
     super().__init__(scene_item_id, scene_item_index, canvas, screen, x, y, width, height, rotation, source_width, source_height, bounds_type, label, interactable)
     self.end_time = end
   
-  def update(self, gui : 'owg.OBS_WS_GUI'):
+  def update(self, gui : 'Default_GUI'):
     time_til = self.end_time - dt.datetime.now()
     
     if time_til.total_seconds() > 0:
@@ -332,7 +338,7 @@ class CountdownInput(TextInput):
       time_til = dt.timedelta(seconds = 0)
       self.set_text(strfdelta(time_til, self.text_format))
       
-  def queue_update_req(self, gui : 'owg.OBS_WS_GUI') -> None:
+  def queue_update_req(self, gui : 'Default_GUI') -> None:
     newend = self.modify_end_strvar.get()
     newdt = dt.datetime.strptime(newend, COUNTDOWN_END_FORMAT)
     
@@ -340,9 +346,9 @@ class CountdownInput(TextInput):
       self.end_time = newdt
       self.update(gui)
       
-    obsobj.OBS_Object.queue_update_req(self, gui)
+    OBS_Object.queue_update_req(self, gui)
   
-  def setup_modify_end(self, gui : 'owg.OBS_WS_GUI', frame : tk.Frame, row : int = 0) -> int:
+  def setup_modify_end(self, gui : 'Default_GUI', frame : tk.Frame, row : int = 0) -> int:
     self.modify_end_label = ttk.Label(frame, text = "Text:")
     self.modify_end_label.grid(column = 0, row = row, sticky = tk.W)
     row += 1
@@ -354,8 +360,8 @@ class CountdownInput(TextInput):
     
     return row
   
-  def setup_modify_ui(self, gui : 'owg.OBS_WS_GUI') -> None:
-    obsobj.OBS_Object.setup_modify_ui(self, gui)
+  def setup_modify_ui(self, gui : 'Default_GUI') -> None:
+    OBS_Object.setup_modify_ui(self, gui)
     
     row = 0
     row = self.setup_modify_name(gui, gui.modifyframe, row)
@@ -365,5 +371,3 @@ class CountdownInput(TextInput):
     row = self.setup_color_picker(gui, gui.modifyframe, "Background: ", lambda s: self.update_background(gui, s), row)
     row = self.setup_background_toggle(gui, gui.modifyframe, row)
     row = self.setup_standard_buttons(gui, gui.modifyframe, row)
-
-import obswsgui as owg

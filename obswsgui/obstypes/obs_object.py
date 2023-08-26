@@ -2,11 +2,20 @@ import enum
 import math
 import tkinter as tk
 from tkinter import ttk
-from typing import List, Tuple, Callable
+from typing import List, Tuple, Callable, TYPE_CHECKING
+
+if TYPE_CHECKING:
+  from ..ui.defaultgui import Default_GUI
 
 import simpleobsws
 
-import geometryutil as geom
+from ..util.geometryutil import (
+  Coords,
+  Polygon,
+  distance,
+  distance_from_segment,
+  point_in_polygon
+)
 
 class InputKind(enum.Enum):
   IMAGE_SOURCE = 'image_source'
@@ -33,7 +42,6 @@ class ModifyType(enum.IntFlag):
   TOP    = enum.auto()
   BOTTOM = enum.auto()
   ROTATE = enum.auto()
-  
 
 def between(val : float, bound1 : float, bound2 : float, inclusive : bool = True):
   if inclusive:
@@ -55,7 +63,7 @@ class OBS_Object:
   
   selected : bool = False
   
-  polygon : geom.Polygon = geom.Polygon()
+  polygon : Polygon = Polygon()
   
   wpx : float = 0.0
   hpx : float = 0.0
@@ -77,7 +85,7 @@ class OBS_Object:
   grabber_ids        : List[int] = None
   
   rotator_dist : float = 40
-  rotator_grabber_pos : geom.Coords = geom.Coords()
+  rotator_grabber_pos : Coords = Coords()
   
   line_width : float = 4
   grabber_radius : float = 8
@@ -105,7 +113,7 @@ class OBS_Object:
     self.source_name = label
     self.interactable = interactable
     
-    self.polygon = geom.Polygon([0, 0], [0, 0], [0, 0], [0, 0])
+    self.polygon = Polygon([0, 0], [0, 0], [0, 0], [0, 0])
     
     self.rect_id = self.canvas.create_polygon(self.polygon.to_array(), width = self.line_width, outline = self.default_color, fill = '')
     
@@ -124,7 +132,7 @@ class OBS_Object:
     
     self.redraw()
     
-  def update(self, qui : 'owg.OBS_WS_GUI') -> None:
+  def update(self, qui : 'Default_GUI') -> None:
     None
     
   def remove_from_canvas(self) -> None:
@@ -178,7 +186,7 @@ class OBS_Object:
     self.hpx = self.height * self.scale
     
     diag_length = math.sqrt(math.pow(self.wpx, 2) + math.pow(self.hpx, 2))
-    rect_angle = geom.Coords(self.wpx, self.hpx).angle()
+    rect_angle = Coords(self.wpx, self.hpx).angle()
     
     self.polygon.point(1).x = self.polygon.point(0).x + self.wpx * math.cos(self.rotation)
     self.polygon.point(1).y = self.polygon.point(0).y + self.wpx * math.sin(self.rotation)
@@ -251,7 +259,7 @@ class OBS_Object:
         top_middle = (self.polygon.point(0) + self.polygon.point(1)) / 2.0
         rpx = self.get_rotatordist()
         
-        inter_pos = geom.Coords(0, math.copysign(rpx, self.hpx))
+        inter_pos = Coords(0, math.copysign(rpx, self.hpx))
         inter_pos.rotate(self.rotation)
         self.rotator_grabber_pos = top_middle - inter_pos
         
@@ -299,7 +307,7 @@ class OBS_Object:
       top_middle = (self.polygon.point(0) + self.polygon.point(1)) / 2.0
       rpx = self.get_rotatordist()
       
-      inter_pos = geom.Coords(0, math.copysign(rpx, self.hpx))
+      inter_pos = Coords(0, math.copysign(rpx, self.hpx))
       inter_pos.rotate(self.rotation)
       self.rotator_grabber_pos = top_middle - inter_pos
       
@@ -314,10 +322,10 @@ class OBS_Object:
     
     self.canvas.itemconfig(self.item_label_id, angle = textangle)
     
-  def contains(self, coords : geom.Coords) -> bool:
-    return geom.point_in_polygon(self.polygon, coords)
+  def contains(self, coords : Coords) -> bool:
+    return point_in_polygon(self.polygon, coords)
   
-  def move_or_resize(self, coords : geom.Coords, zone : int = 10) -> int:
+  def move_or_resize(self, coords : Coords, zone : int = 10) -> int:
     if not self.interactable:
       return ModifyType.NONE
     
@@ -338,10 +346,10 @@ class OBS_Object:
       or coords.y > maxy + zone:
         return ModifyType.NONE
     
-    leftside   = geom.distance_from_segment(self.polygon.point(0), self.polygon.point(3), coords) < zone
-    rightside  = geom.distance_from_segment(self.polygon.point(1), self.polygon.point(2), coords) < zone
-    topside    = geom.distance_from_segment(self.polygon.point(0), self.polygon.point(1), coords) < zone
-    bottomside = geom.distance_from_segment(self.polygon.point(2), self.polygon.point(3), coords) < zone
+    leftside   = distance_from_segment(self.polygon.point(0), self.polygon.point(3), coords) < zone
+    rightside  = distance_from_segment(self.polygon.point(1), self.polygon.point(2), coords) < zone
+    topside    = distance_from_segment(self.polygon.point(0), self.polygon.point(1), coords) < zone
+    bottomside = distance_from_segment(self.polygon.point(2), self.polygon.point(3), coords) < zone
     
     ret = ModifyType.NONE
     if leftside:
@@ -353,9 +361,9 @@ class OBS_Object:
     if bottomside:
       ret |= ModifyType.BOTTOM
     if ret == 0:
-      if geom.point_in_polygon(self.polygon, coords):
+      if point_in_polygon(self.polygon, coords):
         ret = ModifyType.MOVE
-      elif geom.distance(self.rotator_grabber_pos, coords) < zone:
+      elif distance(self.rotator_grabber_pos, coords) < zone:
         ret = ModifyType.ROTATE
       
     return ret
@@ -396,7 +404,7 @@ class OBS_Object:
         last_id = self.move_id_to_back(id, last_id)
     last_id = self.move_id_to_back(self.item_label_id, last_id)
     
-  def setup_color_picker(self, gui : 'owg.OBS_WS_GUI', frame : tk.Frame, label : str, callback : Callable[[str], None], row : int = 0) -> int:
+  def setup_color_picker(self, gui : 'Default_GUI', frame : tk.Frame, label : str, callback : Callable[[str], None], row : int = 0) -> int:
     modify_color_label = ttk.Label(frame, text = label)
     modify_color_label.grid(column = 0, row = row, sticky = tk.W)
     row += 1
@@ -433,7 +441,7 @@ class OBS_Object:
     
     return row
       
-  def setup_modify_name(self, gui : 'owg.OBS_WS_GUI', frame : tk.Frame, row : int = 0) -> int:
+  def setup_modify_name(self, gui : 'Default_GUI', frame : tk.Frame, row : int = 0) -> int:
     self.modify_name_label = ttk.Label(frame, text = "Name:")
     self.modify_name_label.grid(column = 0, row = row, sticky = tk.W)
     row += 1
@@ -445,14 +453,14 @@ class OBS_Object:
     
     return row
   
-  def setup_update_button(self, gui : 'owg.OBS_WS_GUI', frame : tk.Frame, row : int = 0) -> int:
+  def setup_update_button(self, gui : 'Default_GUI', frame : tk.Frame, row : int = 0) -> int:
     self.update_button = ttk.Button(frame, text = "Update", command = lambda: self.setup_update_dialog(gui))
     self.update_button.grid(column = 0, row = row, sticky = (tk.W, tk.E), pady = (0, 5))
     row += 1
     
     return row
   
-  def setup_standard_buttons(self, gui : 'owg.OBS_WS_GUI', frame : tk.Frame, row : int = 0) -> int:
+  def setup_standard_buttons(self, gui : 'Default_GUI', frame : tk.Frame, row : int = 0) -> int:
     self.dupimage = ttk.Button(frame, text = "Duplicate", command = lambda: self.setup_duplicate_dialog(gui))
     self.dupimage.grid(column = 0, row = row, sticky = (tk.W, tk.E), pady = (0, 5))
     row += 1
@@ -467,18 +475,18 @@ class OBS_Object:
     
     return row
       
-  def setup_modify_ui(self, gui : 'owg.OBS_WS_GUI') -> None:
+  def setup_modify_ui(self, gui : 'Default_GUI') -> None:
     gui.modifyframe.columnconfigure(0, weight = 1)
     
-  def queue_move_to_front(self, gui : 'owg.OBS_WS_GUI'):
+  def queue_move_to_front(self, gui : 'Default_GUI'):
     index_req = simpleobsws.Request('SetSceneItemIndex', { 'sceneName': gui.current_scene, 'sceneItemId': self.scene_item_id, 'sceneItemIndex': gui.get_current_scene_items()[0].scene_item_index})
     gui.connection.queue_request(index_req)
     
-  def queue_duplicate_req(self, gui : 'owg.OBS_WS_GUI'):
+  def queue_duplicate_req(self, gui : 'Default_GUI'):
     img_req = simpleobsws.Request('DuplicateSceneItem', { 'sceneName': gui.current_scene, 'sceneItemId': self.scene_item_id})
     gui.connection.queue_request(img_req)
     
-  def setup_duplicate_dialog(self, gui : 'owg.OBS_WS_GUI') -> None:
+  def setup_duplicate_dialog(self, gui : 'Default_GUI') -> None:
     self.dup_image_dialog = tk.Toplevel(gui.root)
     x = gui.root.winfo_x()
     y = gui.root.winfo_y()
@@ -503,11 +511,11 @@ class OBS_Object:
     self.dup_image_cancel = ttk.Button(self.dup_image_frame, text = "No", command = self.dup_image_dialog.destroy)
     self.dup_image_cancel.grid(column = 1, row = 1, sticky = (tk.W, tk.E))
     
-  def queue_delete_req(self, gui : 'owg.OBS_WS_GUI') -> None:
+  def queue_delete_req(self, gui : 'Default_GUI') -> None:
     del_req = simpleobsws.Request('RemoveSceneItem', { 'sceneName': gui.current_scene, 'sceneItemId': self.scene_item_id })
     gui.connection.queue_request(del_req)
     
-  def setup_delete_dialog(self, gui : 'owg.OBS_WS_GUI') -> None:
+  def setup_delete_dialog(self, gui : 'Default_GUI') -> None:
     self.del_image_dialog = tk.Toplevel(gui.root)
     x = gui.root.winfo_x()
     y = gui.root.winfo_y()
@@ -531,17 +539,17 @@ class OBS_Object:
     self.del_image_cancel = ttk.Button(self.del_image_frame, text = "No", command = self.del_image_dialog.destroy)
     self.del_image_cancel.grid(column = 1, row = 1, sticky = tk.E)
     
-  def update_source_name(self, gui : 'owg.OBS_WS_GUI', new_source_name : str) -> None:
+  def update_source_name(self, gui : 'Default_GUI', new_source_name : str) -> None:
     namereq = simpleobsws.Request('SetInputName', { 'inputName': self.source_name, 'newInputName': new_source_name})
     gui.connection.queue_request(namereq)
     
-  def queue_update_req(self, gui : 'owg.OBS_WS_GUI') -> None:
+  def queue_update_req(self, gui : 'Default_GUI') -> None:
     newname = self.modify_name_strvar.get()
       
     if newname != self.source_name:
       self.update_source_name(gui, newname)
     
-  def setup_update_dialog(self, gui : 'owg.OBS_WS_GUI') -> None:
+  def setup_update_dialog(self, gui : 'Default_GUI') -> None:
     self.update_image_dialog = tk.Toplevel(gui.root)
     x = gui.root.winfo_x()
     y = gui.root.winfo_y()
@@ -567,7 +575,5 @@ class OBS_Object:
     self.update_image_cancel = ttk.Button(self.update_image_frame, text = "No", command = self.update_image_dialog.destroy)
     self.update_image_cancel.grid(column = 1, row = 2, sticky = (tk.W, tk.E))
     
-  def setup_create_ui(self, gui : 'owg.OBS_WS_GUI') -> None:
+  def setup_create_ui(self, gui : 'Default_GUI') -> None:
     None
-  
-import obswsgui as owg

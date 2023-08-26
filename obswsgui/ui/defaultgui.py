@@ -5,28 +5,37 @@ logging.basicConfig(level = logging.INFO)
 import asyncio
 import datetime as dt
 import math
+import threading
 import time
 import tkinter as tk
-from tkinter import font, ttk
-from typing import List, Tuple, Callable, Dict
+from tkinter import ttk
+from typing import Callable, Dict, List, Tuple
 
 import simpleobsws
 
-import geometryutil as geom
-import miscutil
-import imageinput as imgin
-import obs_object as obsobj
-import outputbounds as bounds
-import textinput as textin
-import proxiedclientconn as pcc
-import directconn as dc
+from ..networking.directconn import DirectConnection
+from ..obstypes.obs_object import (
+  OBS_Object,
+  ModifyType
+)
+from ..obstypes.outputbounds import OutputBounds
+from ..obstypes.textinput import (
+  TextInput,
+  CountdownInput,
+  TimerInput,
+  COUNTDOWN_END_FORMAT
+)
+from ..obstypes.imageinput import ImageInput
+
+from ..util.geometryutil import Coords
+from ..util.miscutil import obs_to_color
 
 
-class OBS_WS_GUI:
+class Default_GUI:
   ready_to_connect : bool = False
   connected : bool = False
   
-  connection : dc.DirectConnection = None
+  connection : DirectConnection = None
   
   framerate : float = 20.0
   
@@ -35,16 +44,16 @@ class OBS_WS_GUI:
   
   platform : str = ""
   canvas : tk.Canvas = None
-  screen : bounds.OutputBounds = None
+  screen : OutputBounds = None
   
   current_scene : str = None
-  scenes : Dict[str, List[obsobj.OBS_Object]] = {}
+  scenes : Dict[str, List[OBS_Object]] = {}
   
-  prev_selected_item : obsobj.OBS_Object = None
+  prev_selected_item : OBS_Object = None
   
-  lastpos : geom.Coords = geom.Coords()
+  lastpos : Coords = Coords()
   
-  manip_mode : obsobj.ModifyType = obsobj.ModifyType.NONE
+  manip_mode : ModifyType = ModifyType.NONE
   
   modifyframe : ttk.Frame = None
   
@@ -214,8 +223,8 @@ class OBS_WS_GUI:
     self.conn_submit = ttk.Button(self.connframe, textvariable = self.conn_submit_strvar, command = self.start_connection_attempt, style="Large.TButton")
     self.conn_submit.grid(column = 0, row = 2, sticky = (tk.W, tk.E))
     
-  def canvas_to_scene(self, coords : geom.Coords) -> geom.Coords:
-    scene_coords = geom.Coords()
+  def canvas_to_scene(self, coords : Coords) -> Coords:
+    scene_coords = Coords()
     scene_coords.x = round((coords.x - self.screen.polygon.point(0).x) / self.screen.scale)
     scene_coords.y = round((coords.y - self.screen.polygon.point(0).y) / self.screen.scale)
     return scene_coords
@@ -224,12 +233,12 @@ class OBS_WS_GUI:
     self.lastpos.x = x
     self.lastpos.y = y
     
-  def get_items_under_mouse(self, coords : geom.Coords) -> List[Tuple[obsobj.OBS_Object, obsobj.ModifyType]]:
-    items_under : List[Tuple[obsobj.OBS_Object, obsobj.ModifyType]] = []
+  def get_items_under_mouse(self, coords : Coords) -> List[Tuple[OBS_Object, ModifyType]]:
+    items_under : List[Tuple[OBS_Object, ModifyType]] = []
     
     for item in self.get_current_scene_items():
       manip_mode = item.move_or_resize(coords)
-      if manip_mode != obsobj.ModifyType.NONE:
+      if manip_mode != ModifyType.NONE:
         items_under.append((item, manip_mode))
         
     return items_under
@@ -308,7 +317,7 @@ class OBS_WS_GUI:
         h = item.height
         r = item.rotation
         
-        if self.manip_mode == obsobj.ModifyType.MOVE:
+        if self.manip_mode == ModifyType.MOVE:
           x += diffX
           y += diffY
           
@@ -345,9 +354,9 @@ class OBS_WS_GUI:
               y = self.screen.height - h - self.ypull
               self.ypull = 0
           
-        elif self.manip_mode == obsobj.ModifyType.ROTATE:
+        elif self.manip_mode == ModifyType.ROTATE:
           center = item.polygon.centroid()
-          v2 = geom.Coords(event.x, event.y) - center
+          v2 = Coords(event.x, event.y) - center
           
           new_angle = v2.angle() + (math.pi / 2)
                  
@@ -368,31 +377,31 @@ class OBS_WS_GUI:
           y -= displacement.y
           r  = new_angle
         else:
-          moveangle = geom.Coords(diffX, diffY).angle()
+          moveangle = Coords(diffX, diffY).angle()
           aprime = moveangle - item.rotation
           movedist = math.sqrt(math.pow(diffX, 2) + math.pow(diffY, 2))
           rotatedX = movedist * math.cos(aprime)
           rotatedY = movedist * math.sin(aprime)
           
-          if (self.manip_mode & obsobj.ModifyType.LEFT != 0):
+          if (self.manip_mode & ModifyType.LEFT != 0):
             corrX = rotatedX * math.cos(item.rotation)
             corrY = rotatedX * math.sin(item.rotation)
             x += corrX
             y += corrY
           
-          if (self.manip_mode & obsobj.ModifyType.TOP != 0):
+          if (self.manip_mode & ModifyType.TOP != 0):
             corrX = rotatedY * math.cos((math.pi / 2) - item.rotation)
             corrY = rotatedY * math.sin((math.pi / 2) - item.rotation)
             x -= corrX
             y += corrY
           
-          if self.manip_mode & obsobj.ModifyType.LEFT != 0:
+          if self.manip_mode & ModifyType.LEFT != 0:
             w -= rotatedX
-          if self.manip_mode & obsobj.ModifyType.RIGHT != 0:
+          if self.manip_mode & ModifyType.RIGHT != 0:
             w += rotatedX
-          if self.manip_mode & obsobj.ModifyType.TOP != 0:
+          if self.manip_mode & ModifyType.TOP != 0:
             h -= rotatedY
-          if self.manip_mode & obsobj.ModifyType.BOTTOM != 0:
+          if self.manip_mode & ModifyType.BOTTOM != 0:
             h += rotatedY
             
         item.set_transform(x, y, w, h, r)
@@ -402,12 +411,12 @@ class OBS_WS_GUI:
   def mouseUp(self, event : tk.Event) -> None:
     return
   
-  def get_current_scene_items(self) -> List[obsobj.OBS_Object]:
+  def get_current_scene_items(self) -> List[OBS_Object]:
     if self.current_scene not in self.scenes:
       self.scenes[self.current_scene] = []
     return self.scenes[self.current_scene]
   
-  def get_selected_item(self) -> obsobj.OBS_Object:
+  def get_selected_item(self) -> OBS_Object:
     for item in self.get_current_scene_items():
       if item.selected:
         return item
@@ -424,7 +433,7 @@ class OBS_WS_GUI:
       for item in self.get_current_scene_items():
         item.canvas_configure(event)
         
-  def queue_set_item_transform(self, item : obsobj.OBS_Object) -> None:
+  def queue_set_item_transform(self, item : OBS_Object) -> None:
     scale_x = 1.0 if item.source_width == 0.0 else item.width / item.source_width
     scale_y = 1.0 if item.source_height == 0.0 else item.height / item.source_height
     rot = (180.0 * item.rotation / math.pi) % 360.0
@@ -457,7 +466,7 @@ class OBS_WS_GUI:
     self.addimage = ttk.Button(self.defaultframe, text = "+", command = self.setup_add_input_dialog, width = 14, style = "Large.TButton")
     self.addimage.grid(column = 1, row = 1, sticky = tk.W, padx = (5, 0))
     
-    self.screen = bounds.OutputBounds(self.canvas, anchor = tk.CENTER, width = self.output_width, height = self.output_height, label = "Output")
+    self.screen = OutputBounds(self.canvas, anchor = tk.CENTER, width = self.output_width, height = self.output_height, label = "Output")
     
     self.canvas_configure()
     
@@ -521,7 +530,7 @@ class OBS_WS_GUI:
     self.timer_info_label = ttk.Label(frame, text = "End time (YYYY-mm-dd HH:MM:SS)", style = "Large.TLabel")
     self.timer_info_label.grid(column = 0, row = row, sticky = tk.W)
     row += 1
-    self.new_input_param_1_strvar.set((dt.datetime.now() + dt.timedelta(hours = 1)).strftime(textin.COUNTDOWN_END_FORMAT))
+    self.new_input_param_1_strvar.set((dt.datetime.now() + dt.timedelta(hours = 1)).strftime(COUNTDOWN_END_FORMAT))
     self.new_countdown_end_entry = ttk.Entry(frame, textvariable = self.new_input_param_1_strvar, width = 48, **self.largefontopt)
     self.new_countdown_end_entry.grid(column = 0, row = row, sticky = tk.W, pady = (0, 10))
     row += 1
@@ -591,7 +600,7 @@ class OBS_WS_GUI:
     img_name = self.new_input_name_strvar.get()
     img_url  = self.new_input_param_1_strvar.get()
     
-    inp = imgin.ImageInput(-1, -1, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", img_name)
+    inp = ImageInput(-1, -1, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", img_name)
     self.scenes[self.current_scene].append(inp)
     
     if img_name != "" and img_url != "":
@@ -603,7 +612,7 @@ class OBS_WS_GUI:
     input_text = self.new_input_param_1_strvar.get()
     input_kind = 'text_gdiplus_v2' if self.platform == "windows" else 'text_ft2_source_v2'
     
-    inp = textin.TextInput(-1, -1, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name)
+    inp = TextInput(-1, -1, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name)
     self.scenes[self.current_scene].append(inp)
     
     if input_name != "":
@@ -615,9 +624,9 @@ class OBS_WS_GUI:
     input_end  = self.new_input_param_1_strvar.get()
     input_kind = 'text_gdiplus_v2' if self.platform == "windows" else 'text_ft2_source_v2'
     
-    enddt = dt.datetime.strptime(input_end, textin.COUNTDOWN_END_FORMAT)
+    enddt = dt.datetime.strptime(input_end, COUNTDOWN_END_FORMAT)
     
-    inp = textin.CountdownInput(-1, -1, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name, enddt)
+    inp = CountdownInput(-1, -1, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name, enddt)
     self.scenes[self.current_scene].append(inp)
     
     if input_name != "":
@@ -630,7 +639,7 @@ class OBS_WS_GUI:
     
     startdt = dt.datetime.now()
     
-    inp = textin.TimerInput(-1, -1, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name, startdt)
+    inp = TimerInput(-1, -1, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name, startdt)
     self.scenes[self.current_scene].append(inp)
     
     if input_name != "":
@@ -669,7 +678,7 @@ class OBS_WS_GUI:
     
     self.conn_submit_strvar.set("Attempting to connect...")
     
-    self.connection = dc.DirectConnection(address, password, self.log_request_error)
+    self.connection = DirectConnection(address, password, self.log_request_error)
     
     self.connected = await self.connection.connect()
     if not self.connected:  
@@ -703,13 +712,13 @@ class OBS_WS_GUI:
   
     return ret.responseData["baseWidth"], ret.responseData["baseHeight"]
   
-  def find_scene_item(self, item_id : int) -> obsobj.OBS_Object:
+  def find_scene_item(self, item_id : int) -> OBS_Object:
     for item in self.get_current_scene_items():
       if (item.scene_item_id == item_id):
         return item
     return None
   
-  def find_uninit_item(self, sourceName : str) -> obsobj.OBS_Object:
+  def find_uninit_item(self, sourceName : str) -> OBS_Object:
     for item in self.get_current_scene_items():
       if (item.source_name == sourceName) and \
          (item.scene_item_id == -1) and \
@@ -717,7 +726,7 @@ class OBS_WS_GUI:
            return item
     return None
   
-  async def get_image_for_item(self, item : imgin.ImageInput) -> None:
+  async def get_image_for_item(self, item : ImageInput) -> None:
     req = simpleobsws.Request('GetInputSettings', { 'inputName': item.source_name })
     ret = await self.connection.request(req)
     
@@ -725,7 +734,7 @@ class OBS_WS_GUI:
       url = ret.responseData['inputSettings']['file']
       item.set_image_url(url)
   
-  async def get_text_settings(self, item : textin.TextInput) -> None:
+  async def get_text_settings(self, item : TextInput) -> None:
     req = simpleobsws.Request('GetInputSettings', { 'inputName': item.source_name })
     ret = await self.connection.request(req)
     
@@ -738,10 +747,10 @@ class OBS_WS_GUI:
         vertical = settings['vertical']
         item.set_vertical(vertical)
       if 'color' in settings:
-        color = miscutil.obs_to_color(settings['color'])
+        color = obs_to_color(settings['color'])
         item.set_color(color, False)
       if 'bk_color' in settings:
-        bk_color = miscutil.obs_to_color(settings['bk_color'])
+        bk_color = obs_to_color(settings['bk_color'])
         item.set_background_color(bk_color, False)
       if 'bk_opacity' in settings:
         bk_opacity = settings['bk_opacity']
@@ -844,13 +853,13 @@ class OBS_WS_GUI:
         
       else:
         if kind == 'image_source':
-          item = imgin.ImageInput(itemId, itemIndex, self.canvas, self.screen, x, y, w, h, a, sw, sh, boundstype, name)
+          item = ImageInput(itemId, itemIndex, self.canvas, self.screen, x, y, w, h, a, sw, sh, boundstype, name)
           await self.get_image_for_item(item)
         elif kind == 'text_gdiplus_v2' or kind == 'text_ft2_source_v2':
-          item = textin.TextInput(itemId, itemIndex, self.canvas, self.screen, x, y, w, h, a, sw, sh, boundstype, name)
+          item = TextInput(itemId, itemIndex, self.canvas, self.screen, x, y, w, h, a, sw, sh, boundstype, name)
           await self.get_text_settings(item)
         else:
-          item = obsobj.OBS_Object(itemId, itemIndex, self.canvas, self.screen, x, y, w, h, a, sw, sh, boundstype, name)
+          item = OBS_Object(itemId, itemIndex, self.canvas, self.screen, x, y, w, h, a, sw, sh, boundstype, name)
           item.set_interactable(False)
           
         self.scenes[self.current_scene].append(item)
@@ -868,7 +877,7 @@ class OBS_WS_GUI:
       if item.changed:
         self.queue_set_item_transform(item)
         item.changed = False
-      if isinstance(item, textin.TextInput):
+      if isinstance(item, TextInput):
         if item.text_changed:
           item.update_input_text(self)
           item.text_changed = False

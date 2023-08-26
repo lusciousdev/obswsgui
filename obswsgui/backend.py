@@ -5,17 +5,22 @@ import logging
 logging.basicConfig(level = logging.INFO)
 
 import asyncio
-import json
 import argparse
 from websockets import server
 from websockets import typing as wstypes
 from websockets import exceptions as wsexceptions
 import typing
-import uuid
 import ssl
 import pathlib
+import sys
 
-from proxiedconn import Message
+if __package__ is None and not getattr(sys, 'frozen', False):
+    # direct call of __main__.py
+    import os.path
+    path = os.path.realpath(os.path.abspath(__file__))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(path)))
+    
+from obswsgui import Message
 
 class Room:
   room_host : server.WebSocketServerProtocol = []

@@ -1,29 +1,25 @@
 import asyncio
-import datetime as dt
-import json
 import logging
-import typing
 import uuid
 
 import requests
 import simpleobsws
 from websockets import client
 from websockets import exceptions as wsexceptions
-from websockets import typing as wstypes
 
-import conn
-import proxiedconn as pconn
+from .conn import RequestResponseHandler
+from .proxiedconn import ProxiedConnection, Message
 
 logging.getLogger("websockets.client").setLevel(logging.INFO)
 
-class ProxiedServerConnection(pconn.ProxiedConnection):
+class ProxiedServerConnection(ProxiedConnection):
   obsws : simpleobsws.WebSocketClient = None
   proxyws : client.WebSocketClientProtocol = None
   
   proxy_url : str = ""
   roomcode : str = ""
   
-  def __init__(self, obs_url : str, password : str, proxy_url : str, roomcode : str, error_handler : conn.RequestResponseHandler):
+  def __init__(self, obs_url : str, password : str, proxy_url : str, roomcode : str, error_handler : RequestResponseHandler):
     self.url = obs_url
     self.proxy_url = proxy_url
     self.roomcode = roomcode
@@ -50,7 +46,7 @@ class ProxiedServerConnection(pconn.ProxiedConnection):
         'msgType': 'server_subscribe',
         'hasData': False
       }
-      msg = pconn.Message()
+      msg = Message()
       msg.code = self.roomcode
       msg.id = uuid.uuid4().int
       msg.msg_type = "server_subscribe"
@@ -105,13 +101,13 @@ class ProxiedServerConnection(pconn.ProxiedConnection):
       except:
         break
       
-      msg = pconn.Message(rawmsg)
+      msg = Message(rawmsg)
       
       if msg.msg_type == 'await_request':
         req = simpleobsws.Request(msg.data['requestType'], msg.data['requestData'])
         obs_resp = await self.obsws.call(req)
         
-        await_resp = pconn.Message()
+        await_resp = Message()
         await_resp.code = self.roomcode
         await_resp.id = msg.id
         await_resp.msg_type = 'await_response'

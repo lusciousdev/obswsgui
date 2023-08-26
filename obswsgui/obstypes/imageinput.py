@@ -6,10 +6,13 @@ import requests
 import simpleobsws
 from PIL import Image, ImageTk
 
-import obs_object as obsobj
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+  from ..ui.defaultgui import Default_GUI
 
+from .obs_object import OBS_Object
 
-class ImageInput(obsobj.OBS_Object):
+class ImageInput(OBS_Object):
   img_url = ""
   img_id = None
   orig_img = None
@@ -84,7 +87,7 @@ class ImageInput(obsobj.OBS_Object):
     last_id = self.move_id_to_back(self.img_id, above)
     return super().move_to_back(last_id)
     
-  def queue_update_req(self, gui : 'owg.OBS_WS_GUI') -> None:
+  def queue_update_req(self, gui : 'Default_GUI') -> None:
     newname = self.modify_name_strvar.get()
     newurl = self.modify_url_strvar.get()
     
@@ -95,7 +98,7 @@ class ImageInput(obsobj.OBS_Object):
       namereq = simpleobsws.Request('SetInputName', { 'inputName': self.source_name, 'newInputName': self.modify_name_strvar.get()})
       gui.connection.queue_request(namereq)
       
-  def setup_modify_url(self, gui : 'owg.OBS_WS_GUI', frame : tk.Frame, row : int = 0) -> int:
+  def setup_modify_url(self, gui : 'Default_GUI', frame : tk.Frame, row : int = 0) -> int:
     self.modify_url_label = ttk.Label(frame, text = "URL:")
     self.modify_url_label.grid(column = 0, row = row, sticky = tk.W)
     row += 1
@@ -107,7 +110,7 @@ class ImageInput(obsobj.OBS_Object):
     
     return row
   
-  def setup_modify_ui(self, gui : 'owg.OBS_WS_GUI') -> None:
+  def setup_modify_ui(self, gui : 'Default_GUI') -> None:
     super().setup_modify_ui(gui)
     
     row = 0
@@ -117,5 +120,3 @@ class ImageInput(obsobj.OBS_Object):
     row = self.setup_standard_buttons(gui, gui.modifyframe, row)
     
     return super().setup_modify_ui(gui)
-  
-import obswsgui as owg

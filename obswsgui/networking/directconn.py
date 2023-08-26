@@ -1,12 +1,12 @@
-import conn
 import simpleobsws
-import typing
 import logging
 
-class DirectConnection(conn.Connection):
+from .conn import Connection, RequestResponseHandler
+
+class DirectConnection(Connection):
   obsws : simpleobsws.WebSocketClient = None
   
-  def __init__(self, url : str, password : str, error_handler : conn.RequestResponseHandler):
+  def __init__(self, url : str, password : str, error_handler : RequestResponseHandler):
     self.url = url
     self.obsws = simpleobsws.WebSocketClient(url = self.url, password = password)
     

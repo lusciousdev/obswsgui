@@ -4,16 +4,16 @@ logging.basicConfig(level = logging.INFO)
 
 import threading
 import tkinter as tk
-from tkinter import font, ttk
+from tkinter import ttk
 
 import simpleobsws
 
-import obswsgui as owg
-import proxiedclientconn as pcc
+from .defaultgui import Default_GUI
+from ..networking.proxiedclientconn import ProxiedClientConnection
 
 
-class ProxiedOBS_WS_GUI(owg.OBS_WS_GUI):
-  connection : pcc.ProxiedClientConnection = None
+class ProxiedClient_GUI(Default_GUI):
+  connection : ProxiedClientConnection = None
   
   framerate = 20.0
     
@@ -25,7 +25,7 @@ class ProxiedOBS_WS_GUI(owg.OBS_WS_GUI):
     
     self.conn_submit_strvar.set("Attempting to connect...")
     
-    self.connection = pcc.ProxiedClientConnection(url = address, roomcode = roomcode, error_handler = self.log_request_error)
+    self.connection = ProxiedClientConnection(url = address, roomcode = roomcode, error_handler = self.log_request_error)
     
     self.connected = await self.connection.connect()
     if not self.connected:  
@@ -80,7 +80,7 @@ class ProxiedOBS_WS_GUI(owg.OBS_WS_GUI):
     
 if __name__ == '__main__':
   root = tk.Tk()
-  client = ProxiedOBS_WS_GUI(root)
+  client = ProxiedClient_GUI(root)
   
   _thread = threading.Thread(target=client.start_async_loop, daemon=True)
   _thread.start()
