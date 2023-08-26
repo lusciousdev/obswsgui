@@ -1,7 +1,7 @@
 from string import Template
 import datetime as dt
 
-COUNTDOWN_END_FORMAT = "%Y-%m-%d %H:%M:%S"
+TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 class DeltaTemplate(Template):
     delimiter = "%"

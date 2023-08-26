@@ -79,3 +79,22 @@ class CounterInput(TextInput):
     row = self.setup_color_picker(gui, gui.modifyframe, "Background: ", lambda s: self.queue_set_input_background(gui, s), row)
     row = self.setup_background_toggle(gui, gui.modifyframe, row)
     row = self.setup_standard_buttons(gui, gui.modifyframe, row)
+  
+  def to_dict(self) -> dict:
+    d = OBS_Object.to_dict(self)
+    d['type'] = "counterinput"
+    d['format'] = self.counter_format
+    d['count'] = self.counter
+    d['color'] = self.color
+    d['bk_color'] = self.bk_color
+    d['bk_enabled'] = self.bk_enabled
+    return d
+  
+  @staticmethod
+  def from_dict(d : dict, canvas : tk.Canvas, screen : OBS_Object) -> 'CounterInput':
+    counterin = CounterInput(d['scene_item_id'], d['scene_item_index'], canvas, screen, d['x'], d['y'], d['width'], d['height'], d['rotation'], d['source_width'], d['source_height'], d['bounds_type'], d['source_name'], d['format'], d['interactable'])
+    counterin.counter = d['count']
+    counterin.set_color(d['color'], False)
+    counterin.set_background_color(d['bk_color'], False)
+    counterin.toggle_background(d['bk_enabled'], False)
+    return counterin

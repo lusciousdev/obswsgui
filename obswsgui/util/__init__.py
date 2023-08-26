@@ -17,5 +17,5 @@ from .miscutil import (
 
 from .dtutil import (
   strfdelta,
-  COUNTDOWN_END_FORMAT
+  TIME_FORMAT
 )

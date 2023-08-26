@@ -144,3 +144,15 @@ class ImageInput(OBS_Object):
     row = self.setup_standard_buttons(gui, gui.modifyframe, row)
     
     return super().setup_modify_ui(gui)
+  
+  def to_dict(self) -> dict:
+    d = super().to_dict()
+    d['type'] = "imageinput"
+    d['url'] = self.img_url
+    return d
+  
+  @staticmethod
+  def from_dict(d : dict, canvas : tk.Canvas, screen : OBS_Object) -> 'ImageInput':
+    imgin = ImageInput(d['scene_item_id'], d['scene_item_index'], canvas, screen, d['x'], d['y'], d['width'], d['height'], d['rotation'], d['source_width'], d['source_height'], d['bounds_type'], d['source_name'], d['interactable'])
+    imgin.set_url(d['url'], False)
+    return imgin

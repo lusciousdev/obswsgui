@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
   from ..ui.defaultgui import Default_GUI
 
-from ..util.dtutil import COUNTDOWN_END_FORMAT, strfdelta
+from ..util.dtutil import TIME_FORMAT, strfdelta
 from .obs_object import OBS_Object
 from .textinput import TextInput
 
@@ -19,7 +19,7 @@ class CountdownInput(TextInput):
   def __init__(self, scene_item_id : int, scene_item_index : int, canvas : tk.Canvas, screen, x : float, y : float, width : float, height : float, rotation : float, source_width : float, source_height : float, bounds_type : str, label : str = "", end : dt.datetime = None, interactable : bool = True):
     super().__init__(scene_item_id, scene_item_index, canvas, screen, x, y, width, height, rotation, source_width, source_height, bounds_type, label, interactable)
     self.end_time = end
-    self.end_strvar = tk.StringVar(self.canvas, self.end_time.strftime(COUNTDOWN_END_FORMAT))
+    self.end_strvar = tk.StringVar(self.canvas, self.end_time.strftime(TIME_FORMAT))
   
   def update(self, gui : 'Default_GUI'):
     self.calc_time()
@@ -35,7 +35,7 @@ class CountdownInput(TextInput):
       
   def update_info(self) -> None:
     newend = self.end_strvar.get()
-    newdt = dt.datetime.strptime(newend, COUNTDOWN_END_FORMAT)
+    newdt = dt.datetime.strptime(newend, TIME_FORMAT)
     
     if self.end_time != newdt:
       self.end_time = newdt
@@ -65,3 +65,20 @@ class CountdownInput(TextInput):
     row = self.setup_color_picker(gui, gui.modifyframe, "Background: ", lambda s: self.queue_set_input_background(gui, s), row)
     row = self.setup_background_toggle(gui, gui.modifyframe, row)
     row = self.setup_standard_buttons(gui, gui.modifyframe, row)
+  
+  def to_dict(self) -> dict:
+    d = OBS_Object.to_dict(self)
+    d['type'] = "countdowninput"
+    d['end'] = self.end_time.strftime(TIME_FORMAT)
+    d['color'] = self.color
+    d['bk_color'] = self.bk_color
+    d['bk_enabled'] = self.bk_enabled
+    return d
+  
+  @staticmethod
+  def from_dict(d : dict, canvas : tk.Canvas, screen : OBS_Object) -> 'CountdownInput':
+    cdin = CountdownInput(d['scene_item_id'], d['scene_item_index'], canvas, screen, d['x'], d['y'], d['width'], d['height'], d['rotation'], d['source_width'], d['source_height'], d['bounds_type'], d['source_name'], dt.datetime.strptime(d['end'], TIME_FORMAT), d['interactable'])
+    cdin.set_color(d['color'], False)
+    cdin.set_background_color(d['bk_color'], False)
+    cdin.toggle_background(d['bk_enabled'], False)
+    return cdin

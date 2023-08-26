@@ -4,23 +4,25 @@ logging.basicConfig(level = logging.INFO)
 
 import asyncio
 import datetime as dt
+import json
 import math
-import threading
+import os
 import time
 import tkinter as tk
+from pathlib import Path
 from tkinter import ttk
 from typing import Callable, Dict, List, Tuple
 
 import simpleobsws
 
 from ..networking.directconn import DirectConnection
-from ..obstypes.countdowninput import COUNTDOWN_END_FORMAT, CountdownInput
+from ..obstypes.countdowninput import TIME_FORMAT, CountdownInput
+from ..obstypes.counterinput import CounterInput
 from ..obstypes.imageinput import ImageInput
 from ..obstypes.obs_object import ModifyType, OBS_Object
 from ..obstypes.outputbounds import OutputBounds
 from ..obstypes.textinput import TextInput
 from ..obstypes.timerinput import TimerInput
-from ..obstypes.counterinput import CounterInput
 from ..util.geometryutil import Coords
 from ..util.miscutil import obs_to_color
 
@@ -69,6 +71,8 @@ class Default_GUI:
   rotation_groove : float = 8.0 # degrees
   edge_groove     : float = 8.0 # pixels
   
+  savefile = Path("./obswsguidata.json")
+  
   def __init__(self, root : tk.Tk) -> None:
     self.root = root
     
@@ -76,6 +80,7 @@ class Default_GUI:
     self.root.geometry("750x400")
     self.root.minsize(650, 500)
     self.root.configure(background = self.background_color)
+    self.root.protocol("WM_DELETE_WINDOW", self.on_close)
     
     self.root.columnconfigure(0, weight = 1)
     self.root.rowconfigure(0, weight = 1)
@@ -178,6 +183,10 @@ class Default_GUI:
   def clear_root(self) -> None:
     for ele in self.root.winfo_children():
       ele.destroy()
+      
+  def on_close(self) -> None:
+    self.save_scene_items()
+    self.root.destroy()
       
   def reset_to_connection_ui(self) -> None:
       self.connected = False
@@ -406,9 +415,13 @@ class Default_GUI:
     return
   
   def get_current_scene_items(self) -> List[OBS_Object]:
-    if self.current_scene not in self.scenes:
+    if self.current_scene and self.current_scene not in self.scenes:
       self.scenes[self.current_scene] = []
-    return self.scenes[self.current_scene]
+      return self.scenes[self.current_scene]
+    elif self.current_scene:
+      return self.scenes[self.current_scene]
+    else:
+      return []
   
   def get_selected_item(self) -> OBS_Object:
     for item in self.get_current_scene_items():
@@ -450,6 +463,8 @@ class Default_GUI:
     self.addimage.grid(column = 1, row = 1, sticky = tk.W, padx = (5, 0))
     
     self.screen = OutputBounds(self.canvas, anchor = tk.CENTER, width = self.output_width, height = self.output_height, label = "Output")
+    
+    self.load_scene_items()
     
     self.canvas_configure()
     
@@ -513,7 +528,7 @@ class Default_GUI:
     self.timer_info_label = ttk.Label(frame, text = "End time (YYYY-mm-dd HH:MM:SS)", style = "Large.TLabel")
     self.timer_info_label.grid(column = 0, row = row, sticky = tk.W)
     row += 1
-    self.new_input_param_1_strvar.set((dt.datetime.now() + dt.timedelta(hours = 1)).strftime(COUNTDOWN_END_FORMAT))
+    self.new_input_param_1_strvar.set((dt.datetime.now() + dt.timedelta(hours = 1)).strftime(TIME_FORMAT))
     self.new_countdown_end_entry = ttk.Entry(frame, textvariable = self.new_input_param_1_strvar, width = 48, **self.largefontopt)
     self.new_countdown_end_entry.grid(column = 0, row = row, sticky = tk.W, pady = (0, 10))
     row += 1
@@ -623,7 +638,7 @@ class Default_GUI:
     input_end  = self.new_input_param_1_strvar.get()
     input_kind = 'text_gdiplus_v2' if self.platform == "windows" else 'text_ft2_source_v2'
     
-    enddt = dt.datetime.strptime(input_end, COUNTDOWN_END_FORMAT)
+    enddt = dt.datetime.strptime(input_end, TIME_FORMAT)
     
     inp = CountdownInput(-1, -1, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name, enddt)
     self.scenes[self.current_scene].append(inp)
@@ -892,3 +907,42 @@ class Default_GUI:
       logging.error(f"Error {resp.requestStatus['code']}: {resp.requestStatus['comment']}")
     except:
       logging.error(resp)
+      
+  def save_scene_items(self) -> None:
+    d = dict()
+    for scene in self.scenes.keys():
+      d[scene] = []
+      for item in self.scenes[scene]:
+        d[scene].append(item.to_dict())
+        
+    with open(self.savefile, 'w') as f:
+      json.dump(d, f, indent = 2)
+      
+  def load_scene_items(self) -> None:
+    if not (os.path.isfile(self.savefile) and os.path.exists(self.savefile)):
+      return
+    
+    print("Loading scene items from save file.")
+    
+    with open(self.savefile, 'r') as f:
+      d = json.load(f)
+      
+      item = None
+      for scene in dict(d).keys():
+        self.scenes[scene] = []
+        for itemdict in d[scene]:
+          if itemdict['type'] == "imageinput":
+            item = ImageInput.from_dict(itemdict, self.canvas, self.screen)
+          elif itemdict['type'] == "textinput":
+            item = TextInput.from_dict(itemdict, self.canvas, self.screen)
+          elif itemdict['type'] == "timerinput":
+            item = TimerInput.from_dict(itemdict, self.canvas, self.screen)
+          elif itemdict['type'] == "countdowninput":
+            item = CountdownInput.from_dict(itemdict, self.canvas, self.screen)
+          elif itemdict['type'] == "counterinput":
+            item = CounterInput.from_dict(itemdict, self.canvas, self.screen)
+          else:
+            logging.error("Unrecognized item type in save data. Skipping.")
+
+          if item:
+            self.scenes[scene].append(item)

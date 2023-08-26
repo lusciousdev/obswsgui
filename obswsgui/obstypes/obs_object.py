@@ -608,3 +608,24 @@ class OBS_Object:
     
   def setup_create_ui(self, gui : 'Default_GUI') -> None:
     None
+    
+  def to_dict(self) -> dict:
+    return {
+      "type": "obs_object",
+      "x": self.x,
+      "y": self.y,
+      "width": self.width,
+      "height": self.height,
+      "rotation": self.rotation,
+      "source_width": self.source_width,
+      "source_height": self.source_height,
+      "source_name": self.source_name,
+      "scene_item_id": self.scene_item_id,
+      "scene_item_index": self.scene_item_index,
+      "bounds_type": self.bounds_type,
+      "interactable": self.interactable
+    }
+  
+  @staticmethod
+  def from_dict(d : dict, canvas : tk.Canvas, screen : 'OBS_Object') -> 'OBS_Object':
+    return OBS_Object(d['scene_item_id'], d['scene_item_index'], canvas, screen, d['x'], d['y'], d['width'], d['height'], d['rotation'], d['source_width'], d['source_height'], d['bounds_type'], d['source_name'], d['interactable'])

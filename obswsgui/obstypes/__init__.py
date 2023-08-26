@@ -20,7 +20,7 @@ from .textinput import (
 
 from .countdowninput import (
   CountdownInput,
-  COUNTDOWN_END_FORMAT
+  TIME_FORMAT
 )
 
 from .timerinput import (

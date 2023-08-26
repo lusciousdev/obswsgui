@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
   from ..ui.defaultgui import Default_GUI
 
-from ..util.dtutil import strfdelta
+from ..util.dtutil import strfdelta, TIME_FORMAT
 from .obs_object import OBS_Object
 from .textinput import TextInput
 
@@ -72,4 +72,21 @@ class TimerInput(TextInput):
     row = self.setup_color_picker(gui, gui.modifyframe, "Background: ", lambda s: self.queue_set_input_background(gui, s), row)
     row = self.setup_background_toggle(gui, gui.modifyframe, row)
     row = self.setup_standard_buttons(gui, gui.modifyframe, row)
+  
+  def to_dict(self) -> dict:
+    d = OBS_Object.to_dict(self)
+    d['type'] = "timerinput"
+    d['start'] = self.start_time.strftime(TIME_FORMAT)
+    d['color'] = self.color
+    d['bk_color'] = self.bk_color
+    d['bk_enabled'] = self.bk_enabled
+    return d
+  
+  @staticmethod
+  def from_dict(d : dict, canvas : tk.Canvas, screen : OBS_Object) -> 'TimerInput':
+    timerin = TimerInput(d['scene_item_id'], d['scene_item_index'], canvas, screen, d['x'], d['y'], d['width'], d['height'], d['rotation'], d['source_width'], d['source_height'], d['bounds_type'], d['source_name'], dt.datetime.strptime(d['start'], TIME_FORMAT), d['interactable'])
+    timerin.set_color(d['color'], False)
+    timerin.set_background_color(d['bk_color'], False)
+    timerin.toggle_background(d['bk_enabled'], False)
+    return timerin
   
