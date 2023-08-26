@@ -24,11 +24,9 @@ from .networking.proxiedserverconn import (
   ProxiedServerConnection
 )
 
-from .obstypes.textinput import (
-  TextInput,
-  CountdownInput,
-  TimerInput
-)
+from .obstypes.textinput import TextInput
+from .obstypes.countdowninput import CountdownInput, COUNTDOWN_END_FORMAT
+from .obstypes.timerinput import TimerInput
 
 from .obstypes.obs_object import (
   InputKind,

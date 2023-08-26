@@ -7,6 +7,7 @@ import simpleobsws
 from PIL import Image, ImageTk
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
   from ..ui.defaultgui import Default_GUI
 
@@ -14,12 +15,23 @@ from .obs_object import OBS_Object
 
 class ImageInput(OBS_Object):
   img_url = ""
+  url_changed = False
   img_id = None
   orig_img = None
   resized_img = None
   transformed_img = None
   tk_img = None
   
+  def __init__(self, scene_item_id : int, scene_item_index : int, canvas : tk.Canvas, screen, x : float, y : float, width : float, height : float, rotation : float, source_width : float, source_height : float, bounds_type : str, label : str = "", interactable : bool = True):
+    super().__init__(scene_item_id, scene_item_index, canvas, screen, x, y, width, height, rotation, source_width, source_height, bounds_type, label, interactable)
+    self.url_strvar = tk.StringVar(self.canvas, self.img_url)
+    
+  def send_necessary_data(self, gui: 'Default_GUI') -> None:
+    if self.url_changed:
+      self.queue_set_input_url(gui)
+    
+    return super().send_necessary_data(gui)
+ 
   def remove_from_canvas(self) -> None:
     super().remove_from_canvas()
     if self.img_id:
@@ -67,17 +79,28 @@ class ImageInput(OBS_Object):
       else:
         self.canvas.coords(self.img_id, imgx, imgy)
         self.canvas.itemconfigure(self.img_id, image = self.tk_img)
+        
+  def load_image(self):
+    try:
+      self.orig_img = Image.open(requests.get(self.img_url, stream = True).raw)
+      print(f"image loaded from {self.img_url}")
+    except:
+      print(f"failed to load image from {self.img_url}")
+      self.orig_img = None
     
-  def set_image_url(self, url : str) -> None:
+  def set_url(self, url : str, local : bool = True) -> None:
+    if self.url_changed and not local:
+      # ignore network updates while we are still waiting to send our state
+      return
+    
     if self.img_url != url:
-      try:
-        self.img_url = url
-        self.orig_img = Image.open(requests.get(self.img_url, stream = True).raw)
-        print(f"image loaded from {url}")
-      except:
-        print(f"failed to load image from {url}")
-        self.orig_img = None
+      self.img_url = url
+      self.url_strvar.set(self.img_url)
+      self.load_image()
+      
       self.redraw()
+      
+      self.url_changed |= local
       
   def move_to_front(self, under : int = None) -> None:
     last_id = self.move_id_to_front(self.img_id, under)
@@ -86,25 +109,26 @@ class ImageInput(OBS_Object):
   def move_to_back(self, above : int = None) -> None:
     last_id = self.move_id_to_back(self.img_id, above)
     return super().move_to_back(last_id)
+  
+  def queue_set_input_url(self, gui : 'Default_GUI') -> None:
+    urlreq = simpleobsws.Request('SetInputSettings', { 'inputName': self.source_name, 'inputSettings': { 'file': self.img_url }})
+    gui.connection.queue_request(urlreq)
     
-  def queue_update_req(self, gui : 'Default_GUI') -> None:
-    newname = self.modify_name_strvar.get()
-    newurl = self.modify_url_strvar.get()
+    
+  def update_info(self) -> None:
+    newurl = self.url_strvar.get()
     
     if newurl != self.img_url:
-      urlreq = simpleobsws.Request('SetInputSettings', { 'inputName': self.source_name, 'inputSettings': { 'file': self.modify_url_entry.get() }})
-      gui.connection.queue_request(urlreq)
-    if newname != self.source_name:
-      namereq = simpleobsws.Request('SetInputName', { 'inputName': self.source_name, 'newInputName': self.modify_name_strvar.get()})
-      gui.connection.queue_request(namereq)
+      self.set_url(newurl)
+      
+    super().update_info()
       
   def setup_modify_url(self, gui : 'Default_GUI', frame : tk.Frame, row : int = 0) -> int:
     self.modify_url_label = ttk.Label(frame, text = "URL:")
     self.modify_url_label.grid(column = 0, row = row, sticky = tk.W)
     row += 1
     
-    self.modify_url_strvar = tk.StringVar(gui.root, self.img_url)
-    self.modify_url_entry = ttk.Entry(frame, textvariable = self.modify_url_strvar)
+    self.modify_url_entry = ttk.Entry(frame, textvariable = self.url_strvar)
     self.modify_url_entry.grid(column = 0, row = row, sticky = (tk.W, tk.E), pady = (0, 5))
     row += 1
     

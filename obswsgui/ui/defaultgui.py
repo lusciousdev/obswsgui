@@ -14,19 +14,13 @@ from typing import Callable, Dict, List, Tuple
 import simpleobsws
 
 from ..networking.directconn import DirectConnection
-from ..obstypes.obs_object import (
-  OBS_Object,
-  ModifyType
-)
-from ..obstypes.outputbounds import OutputBounds
-from ..obstypes.textinput import (
-  TextInput,
-  CountdownInput,
-  TimerInput,
-  COUNTDOWN_END_FORMAT
-)
+from ..obstypes.countdowninput import COUNTDOWN_END_FORMAT, CountdownInput
 from ..obstypes.imageinput import ImageInput
-
+from ..obstypes.obs_object import ModifyType, OBS_Object
+from ..obstypes.outputbounds import OutputBounds
+from ..obstypes.textinput import TextInput
+from ..obstypes.timerinput import TimerInput
+from ..obstypes.counterinput import CounterInput
 from ..util.geometryutil import Coords
 from ..util.miscutil import obs_to_color
 
@@ -70,7 +64,7 @@ class Default_GUI:
   
   style : ttk.Style = None
   
-  input_types : List[str] = ["image", "text", "countdown", "timer"]
+  input_types : List[str] = ["image", "text", "countdown", "timer", "counter"]
   
   rotation_groove : float = 8.0 # degrees
   edge_groove     : float = 8.0 # pixels
@@ -79,8 +73,8 @@ class Default_GUI:
     self.root = root
     
     self.root.title("OBS WebSocket GUI")
-    self.root.geometry("720x400")
-    self.root.minsize(600, 500)
+    self.root.geometry("750x400")
+    self.root.minsize(650, 500)
     self.root.configure(background = self.background_color)
     
     self.root.columnconfigure(0, weight = 1)
@@ -432,22 +426,11 @@ class Default_GUI:
       
       for item in self.get_current_scene_items():
         item.canvas_configure(event)
-        
-  def queue_set_item_transform(self, item : OBS_Object) -> None:
-    scale_x = 1.0 if item.source_width == 0.0 else item.width / item.source_width
-    scale_y = 1.0 if item.source_height == 0.0 else item.height / item.source_height
-    rot = (180.0 * item.rotation / math.pi) % 360.0
-    if item.bounds_type == 'OBS_BOUNDS_SCALE_INNER':
-      tf_req = simpleobsws.Request('SetSceneItemTransform', { 'sceneName': self.current_scene, 'sceneItemId': item.scene_item_id, 'sceneItemTransform': { 'positionX': item.x, 'positionY': item.y, 'boundsWidth': item.width, 'boundsHeight': item.height, 'rotation': rot }})
-    else:
-      tf_req = simpleobsws.Request('SetSceneItemTransform', { 'sceneName': self.current_scene, 'sceneItemId': item.scene_item_id, 'sceneItemTransform': { 'positionX': item.x, 'positionY': item.y, 'scaleX': scale_x, 'scaleY': scale_y, 'rotation': rot }})
-      
-    self.connection.queue_request(tf_req)
     
   def setup_default_ui(self) -> None:
     self.defaultframe = ttk.Frame(self.root, padding = "5 5 5 5")
     self.defaultframe.pack(anchor = tk.CENTER, fill = tk.BOTH, expand = True)
-    self.defaultframe.columnconfigure(0, minsize=150)
+    self.defaultframe.columnconfigure(0, minsize=175)
     self.defaultframe.columnconfigure(1, weight = 1)
     self.defaultframe.rowconfigure(0, weight=1)
     
@@ -547,6 +530,20 @@ class Default_GUI:
     
     row = self.setup_add_input_buttons(frame, self.queue_add_timer_req, row)
     
+  def setup_add_counter_dialog(self, frame : tk.Frame) -> None:
+    row = 0
+    row = self.setup_add_input_name(frame, row)
+    
+    self.counter_info_label = ttk.Label(frame, text = "Counter format (__count__ gets replaced):", style = "Large.TLabel")
+    self.counter_info_label.grid(column = 0, row = row, sticky = tk.W)
+    row += 1
+    self.new_input_param_1_strvar.set("Current count is __count__.")
+    self.new_counter_entry = ttk.Entry(frame, textvariable = self.new_input_param_1_strvar, width = 48, **self.largefontopt)
+    self.new_counter_entry.grid(column = 0, row = row, sticky = tk.W, pady = (0, 10))
+    row += 1
+    
+    row = self.setup_add_input_buttons(frame, self.queue_add_counter_req, row)
+    
   def close_add_input_dialog(self) -> None:
     self.new_input_name_strvar.set("")
     self.new_input_param_1_strvar.set("")
@@ -595,6 +592,8 @@ class Default_GUI:
       self.setup_add_countdown_dialog(frame)
     elif inputtype == "timer":
       self.setup_add_timer_dialog(frame)
+    elif inputtype == "counter":
+      self.setup_add_counter_dialog(frame)
     
   def queue_add_image_req(self) -> None:
     img_name = self.new_input_name_strvar.get()
@@ -644,6 +643,18 @@ class Default_GUI:
     
     if input_name != "":
       img_req  = simpleobsws.Request('CreateInput', { 'sceneName': self.current_scene, 'inputName': input_name, 'inputKind': input_kind, 'inputSettings': { 'text': "" }, 'sceneItemEnabled': True })
+      self.connection.queue_request(img_req)
+    
+  def queue_add_counter_req(self) -> None:
+    input_name = self.new_input_name_strvar.get()
+    counter_format = self.new_input_param_1_strvar.get()
+    input_kind = 'text_gdiplus_v2' if self.platform == "windows" else 'text_ft2_source_v2'
+    
+    inp = CounterInput(-1, -1, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name, counter_format)
+    self.scenes[self.current_scene].append(inp)
+    
+    if input_name != "":
+      img_req  = simpleobsws.Request('CreateInput', { 'sceneName': self.current_scene, 'inputName': input_name, 'inputKind': input_kind, 'inputSettings': { 'text': inp.get_formatted_counter() }, 'sceneItemEnabled': True })
       self.connection.queue_request(img_req)
   
   def set_conn_ui_state(self, disabled : bool, submit_str : str) -> None:
@@ -732,7 +743,7 @@ class Default_GUI:
     
     if ret and 'file' in ret.responseData['inputSettings']:
       url = ret.responseData['inputSettings']['file']
-      item.set_image_url(url)
+      item.set_url(url, False)
   
   async def get_text_settings(self, item : TextInput) -> None:
     req = simpleobsws.Request('GetInputSettings', { 'inputName': item.source_name })
@@ -839,7 +850,7 @@ class Default_GUI:
       
       if item:
         item.set_transform(x, y, w, h, (math.pi * a / 180.0), local = False)
-        item.set_source_name(name)
+        item.set_source_name(name, False)
         item.set_scene_item_id(itemId)
         item.scene_item_index = itemIndex
         item.source_width = sw
@@ -874,17 +885,7 @@ class Default_GUI:
       
   def queue_item_modification_requests(self) -> None:
     for item in self.get_current_scene_items():
-      if item.changed:
-        self.queue_set_item_transform(item)
-        item.changed = False
-      if isinstance(item, TextInput):
-        if item.text_changed:
-          item.update_input_text(self)
-          item.text_changed = False
-        if item.color_changed:
-          item.update_text_color(self)
-          item.update_background(self)
-          item.color_changed = False
+      item.send_necessary_data(self)
     
   def log_request_error(self, resp : simpleobsws.RequestResponse) -> None:
     try:

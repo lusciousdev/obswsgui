@@ -11,7 +11,6 @@ import simpleobsws
 from .defaultgui import Default_GUI
 from ..networking.proxiedclientconn import ProxiedClientConnection
 
-
 class ProxiedClient_GUI(Default_GUI):
   connection : ProxiedClientConnection = None
   

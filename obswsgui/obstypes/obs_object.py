@@ -69,6 +69,9 @@ class OBS_Object:
   hpx : float = 0.0
   
   source_name      : str = ""
+  last_source_name : str = ""
+  source_name_changed : bool = False
+
   scene_item_id    : int = -1
   scene_item_index : int = -1
   bounds_type      : str = ""
@@ -95,7 +98,7 @@ class OBS_Object:
   default_color  : str = "#efeff1"
   selected_color : str = "#fab4ff"
   
-  changed : bool = False
+  trans_changed : bool = False
   
   def __init__(self, scene_item_id : int, scene_item_index : int, canvas : tk.Canvas, screen, x : float, y : float, width : float, height : float, rotation : float, source_width : float, source_height : float, bounds_type : str, label : str = "", interactable : bool = True):
     self.scene_item_id = scene_item_id
@@ -130,10 +133,20 @@ class OBS_Object:
     
     self.item_label_id = self.canvas.create_text(0, 0, anchor = tk.SW, text = f"{self.source_name} ({self.scene_item_id})", fill = self.default_color, angle = 0)
     
+    self.name_strvar = tk.StringVar(self.canvas, self.source_name)
+    
     self.redraw()
     
   def update(self, qui : 'Default_GUI') -> None:
     None
+    
+  def send_necessary_data(self, gui : 'Default_GUI') -> None:
+    if self.source_name_changed:
+      self.queue_set_input_name(gui)
+      self.source_name_changed = False
+    if self.trans_changed:
+      self.queue_set_item_transform(gui)
+      self.trans_changed = False
     
   def remove_from_canvas(self) -> None:
     if self.rect_id:
@@ -208,9 +221,20 @@ class OBS_Object:
   
   def get_color(self):
     return self.selected_color if self.selected else self.default_color
+        
+  def queue_set_item_transform(self, gui : 'Default_GUI') -> None:
+    scale_x = 1.0 if self.source_width == 0.0 else self.width / self.source_width
+    scale_y = 1.0 if self.source_height == 0.0 else self.height / self.source_height
+    rot = (180.0 * self.rotation / math.pi) % 360.0
+    if self.bounds_type == 'OBS_BOUNDS_SCALE_INNER':
+      tf_req = simpleobsws.Request('SetSceneItemTransform', { 'sceneName': gui.current_scene, 'sceneItemId': self.scene_item_id, 'sceneItemTransform': { 'positionX': self.x, 'positionY': self.y, 'boundsWidth': self.width, 'boundsHeight': self.height, 'rotation': rot }})
+    else:
+      tf_req = simpleobsws.Request('SetSceneItemTransform', { 'sceneName': gui.current_scene, 'sceneItemId': self.scene_item_id, 'sceneItemTransform': { 'positionX': self.x, 'positionY': self.y, 'scaleX': scale_x, 'scaleY': scale_y, 'rotation': rot }})
+      
+    gui.connection.queue_request(tf_req)
     
   def set_transform(self, x = None, y = None, w = None, h = None, rot = None, local = True):
-    if self.changed and not local:
+    if self.trans_changed and not local:
       # ignore network updates while we are still waiting to send our state
       return
     
@@ -227,7 +251,7 @@ class OBS_Object:
       self.height = h
       self.rotation = rot
       
-      self.changed |= local
+      self.trans_changed |= local
       self.redraw()
       
   def set_selected(self, selected : bool) -> None:
@@ -280,10 +304,18 @@ class OBS_Object:
       self.scene_item_id = scene_item_id
       self.canvas.itemconfigure(self.item_label_id, text = f"{self.source_name} ({self.scene_item_id})")
     
-  def set_source_name(self, source_name : str) -> None:
+  def set_source_name(self, source_name : str, local : bool = True) -> None:
+    if self.source_name_changed and not local:
+      # ignore network updates while we are still waiting to send our state
+      return
+    
     if self.source_name != source_name:
+      self.last_source_name = self.source_name
       self.source_name = source_name
+      self.name_strvar.set(self.source_name)
       self.canvas.itemconfigure(self.item_label_id, text = f"{self.source_name} ({self.scene_item_id})")
+      
+      self.source_name_changed |= local
       
   def canvas_configure(self, event : tk.Event = None) -> None:
     self.scale = self.screen.scale
@@ -446,8 +478,7 @@ class OBS_Object:
     self.modify_name_label.grid(column = 0, row = row, sticky = tk.W)
     row += 1
     
-    self.modify_name_strvar = tk.StringVar(gui.root, self.source_name)
-    self.modify_name_entry = ttk.Entry(frame, textvariable=self.modify_name_strvar)
+    self.modify_name_entry = ttk.Entry(frame, textvariable=self.name_strvar)
     self.modify_name_entry.grid(column = 0, row = row, sticky = (tk.W, tk.E), pady = (0, 5))
     row += 1
     
@@ -539,15 +570,15 @@ class OBS_Object:
     self.del_image_cancel = ttk.Button(self.del_image_frame, text = "No", command = self.del_image_dialog.destroy)
     self.del_image_cancel.grid(column = 1, row = 1, sticky = tk.E)
     
-  def update_source_name(self, gui : 'Default_GUI', new_source_name : str) -> None:
-    namereq = simpleobsws.Request('SetInputName', { 'inputName': self.source_name, 'newInputName': new_source_name})
+  def queue_set_input_name(self, gui : 'Default_GUI') -> None:
+    namereq = simpleobsws.Request('SetInputName', { 'inputName': self.last_source_name, 'newInputName': self.source_name})
     gui.connection.queue_request(namereq)
     
-  def queue_update_req(self, gui : 'Default_GUI') -> None:
-    newname = self.modify_name_strvar.get()
+  def update_info(self) -> None:
+    newname = self.name_strvar.get()
       
     if newname != self.source_name:
-      self.update_source_name(gui, newname)
+      self.set_source_name(newname, True)
     
   def setup_update_dialog(self, gui : 'Default_GUI') -> None:
     self.update_image_dialog = tk.Toplevel(gui.root)
@@ -566,7 +597,7 @@ class OBS_Object:
     self.update_image_warn_label.grid(column = 0, columnspan = 2, row = 1, sticky = (tk.W, tk.E))
     
     def updatefunc():
-      self.queue_update_req(gui)
+      self.update_info()
       self.update_image_dialog.destroy()
       
     self.update_image_submit = ttk.Button(self.update_image_frame, text = "Yes", command = updatefunc)
