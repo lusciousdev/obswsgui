@@ -22,10 +22,21 @@ from ..obstypes.imageinput import ImageInput
 from ..obstypes.obs_object import ModifyType, OBS_Object
 from ..obstypes.outputbounds import OutputBounds
 from ..obstypes.textinput import TextInput
+from ..obstypes.stopwatchinput import StopwatchInput
 from ..obstypes.timerinput import TimerInput
 from ..util.geometryutil import Coords
 from ..util.miscutil import obs_to_color
 
+user_types : List[OBS_Object] = [
+  ImageInput,
+  TextInput,
+  CountdownInput,
+  StopwatchInput,
+  CounterInput,
+  TimerInput
+]
+
+user_types_map : Dict[str, OBS_Object] = { v.description():v for v in user_types }
 
 class Default_GUI:
   ready_to_connect : bool = False
@@ -66,8 +77,6 @@ class Default_GUI:
   
   style : ttk.Style = None
   
-  input_types : List[str] = ["image", "text", "countdown", "timer", "counter"]
-  
   rotation_groove : float = 8.0 # degrees
   edge_groove     : float = 8.0 # pixels
   
@@ -85,14 +94,20 @@ class Default_GUI:
     self.root.columnconfigure(0, weight = 1)
     self.root.rowconfigure(0, weight = 1)
     
-    self.addr_strvar     = tk.StringVar(self.root, value = "ws://127.0.0.1:4455")
+    self.addr_strvar        = tk.StringVar(self.root, value = "ws://127.0.0.1:4455")
     self.pw_strvar          = tk.StringVar(self.root, "testpw")
     self.conn_submit_strvar = tk.StringVar(self.root, "Connect")
     
     self.new_input_type_strvar = tk.StringVar(self.root, "image")
     self.new_input_name_strvar = tk.StringVar(self.root, "")
     
-    self.new_input_param_1_strvar = tk.StringVar(self.root, "")
+    self.string_param_1 = tk.StringVar(self.root, "")
+    self.string_param_2 = tk.StringVar(self.root, "")
+    self.string_param_3 = tk.StringVar(self.root, "")
+    
+    self.boolean_param_1 = tk.BooleanVar(self.root, False)
+    self.int_param_1 = tk.IntVar(self.root, 0)
+    self.double_param_1 = tk.DoubleVar(self.root, 0.0)
     
     self.style = ttk.Style(self.root)
     self.style.theme_create("obswsgui", parent = "alt", settings = {
@@ -131,6 +146,12 @@ class Default_GUI:
       },
       "Large.TMenubutton": {
         "configure": self.largefontopt
+      },
+      "Large.TCheckbutton": {
+        "configure": {
+          **self.largefontopt,
+          "indicatorcolor": self.background_button
+        }
       },
       "Huge.TLabel": {
         "configure": self.hugefontopt
@@ -468,100 +489,9 @@ class Default_GUI:
     
     self.canvas_configure()
     
-  def setup_add_input_name(self, frame : tk.Frame, row : int = 0) -> int:
-    self.new_input_name_label = ttk.Label(frame, text = "Input name", style = "Large.TLabel")
-    self.new_input_name_label.grid(column = 0, row = row, sticky = tk.W)
-    row += 1
-    self.new_input_name_entry = ttk.Entry(frame, textvariable = self.new_input_name_strvar, width = 48, **self.largefontopt)
-    self.new_input_name_entry.grid(column = 0, row = row, sticky = tk.W, pady = (0, 10))
-    row += 1
-    
-    return row
-  
-  def setup_add_input_buttons(self, frame : tk.Frame, addcb : Callable, row : int = 0) -> int:
-    self.add_input_button_frame = ttk.Frame(frame)
-    self.add_input_button_frame.grid(column = 0, row = row, sticky= tk.E)
-    row += 1
-    
-    def addimg() -> None:
-      addcb()
-      self.close_add_input_dialog()
-    
-    self.new_input_submit = ttk.Button(self.add_input_button_frame, text = "Add", command = addimg, padding = "5 0 0 0", style = "Large.TButton")
-    self.new_input_submit.grid(column = 0, row = 0, sticky = tk.E, padx = (5, 5))
-    
-    self.new_input_cancel = ttk.Button(self.add_input_button_frame, text = "Cancel", command = self.close_add_input_dialog, style="Large.TButton")
-    self.new_input_cancel.grid(column = 1, row = 0, sticky = tk.E, padx = (5, 5))
-    
-    return row
-    
-  def setup_add_image_dialog(self, frame : tk.Frame) -> None:
-    row = 0
-    row = self.setup_add_input_name(frame, row)
-    
-    self.new_image_url_label = ttk.Label(frame, text = "Image URL (must be online)", style = "Large.TLabel")
-    self.new_image_url_label.grid(column = 0, row = row, sticky = tk.W)
-    row += 1
-    self.new_image_url_entry = ttk.Entry(frame, textvariable = self.new_input_param_1_strvar, width = 48, **self.largefontopt)
-    self.new_image_url_entry.grid(column = 0, row = row, sticky = tk.W, pady = (0, 10))
-    row += 1
-    
-    row = self.setup_add_input_buttons(frame, self.queue_add_image_req, row)
-    
-  def setup_add_text_dialog(self, frame : tk.Frame) -> None:
-    row = 0
-    row = self.setup_add_input_name(frame, row)
-    
-    self.new_text_text_label = ttk.Label(frame, text = "Text", style = "Large.TLabel")
-    self.new_text_text_label.grid(column = 0, row = row, sticky = tk.W)
-    row += 1
-    self.new_text_text_entry = ttk.Entry(frame, textvariable = self.new_input_param_1_strvar, width = 48, **self.largefontopt)
-    self.new_text_text_entry.grid(column = 0, row = row, sticky = tk.W, pady = (0, 10))
-    row += 1    
-    
-    row = self.setup_add_input_buttons(frame, self.queue_add_text_req, row)
-    
-  def setup_add_countdown_dialog(self, frame : tk.Frame) -> None:
-    row = 0
-    row = self.setup_add_input_name(frame, row)
-    
-    self.timer_info_label = ttk.Label(frame, text = "End time (YYYY-mm-dd HH:MM:SS)", style = "Large.TLabel")
-    self.timer_info_label.grid(column = 0, row = row, sticky = tk.W)
-    row += 1
-    self.new_input_param_1_strvar.set((dt.datetime.now() + dt.timedelta(hours = 1)).strftime(TIME_FORMAT))
-    self.new_countdown_end_entry = ttk.Entry(frame, textvariable = self.new_input_param_1_strvar, width = 48, **self.largefontopt)
-    self.new_countdown_end_entry.grid(column = 0, row = row, sticky = tk.W, pady = (0, 10))
-    row += 1
-    
-    row = self.setup_add_input_buttons(frame, self.queue_add_countdown_req, row)
-    
-  def setup_add_timer_dialog(self, frame : tk.Frame) -> None:
-    row = 0
-    row = self.setup_add_input_name(frame, row)
-    
-    self.timer_info_label = ttk.Label(frame, text = "Timer will start when added.", style = "Large.TLabel")
-    self.timer_info_label.grid(column = 0, row = row, pady = (10, 10), sticky = tk.W)
-    row += 1
-    
-    row = self.setup_add_input_buttons(frame, self.queue_add_timer_req, row)
-    
-  def setup_add_counter_dialog(self, frame : tk.Frame) -> None:
-    row = 0
-    row = self.setup_add_input_name(frame, row)
-    
-    self.counter_info_label = ttk.Label(frame, text = "Counter format (__count__ gets replaced):", style = "Large.TLabel")
-    self.counter_info_label.grid(column = 0, row = row, sticky = tk.W)
-    row += 1
-    self.new_input_param_1_strvar.set("Current count is __count__.")
-    self.new_counter_entry = ttk.Entry(frame, textvariable = self.new_input_param_1_strvar, width = 48, **self.largefontopt)
-    self.new_counter_entry.grid(column = 0, row = row, sticky = tk.W, pady = (0, 10))
-    row += 1
-    
-    row = self.setup_add_input_buttons(frame, self.queue_add_counter_req, row)
-    
   def close_add_input_dialog(self) -> None:
     self.new_input_name_strvar.set("")
-    self.new_input_param_1_strvar.set("")
+    self.string_param_1.set("")
     self.add_input_dialog.destroy()
   
   def setup_add_input_dialog(self) -> None:
@@ -581,7 +511,8 @@ class Default_GUI:
     
     self.add_input_type_label = ttk.Label(self.add_input_type_frame, text = "Input type", style = "Large.TLabel")
     self.add_input_type_label.grid(column = 0, row = 0, sticky = tk.W)
-    self.add_input_type_select = ttk.OptionMenu(self.add_input_type_frame, self.new_input_type_strvar, self.input_types[0], *self.input_types, command = self.new_input_type_change, style = "Large.TMenubutton")
+    opts = list(user_types_map.keys())
+    self.add_input_type_select = ttk.OptionMenu(self.add_input_type_frame, self.new_input_type_strvar, opts[0], *opts, command = self.new_input_type_change, style = "Large.TMenubutton")
     self.add_input_type_select.grid(column = 0, row = 1, sticky = (tk.W, tk.E))
     
     self.add_input_settings_frame = ttk.Frame(self.add_input_dialog, padding = "5 5 5 5")
@@ -599,78 +530,7 @@ class Default_GUI:
       
     frame = self.add_input_settings_frame
     
-    if inputtype == "image":
-      self.setup_add_image_dialog(frame)
-    elif inputtype == "text":
-      self.setup_add_text_dialog(frame)
-    elif inputtype == "countdown":
-      self.setup_add_countdown_dialog(frame)
-    elif inputtype == "timer":
-      self.setup_add_timer_dialog(frame)
-    elif inputtype == "counter":
-      self.setup_add_counter_dialog(frame)
-    
-  def queue_add_image_req(self) -> None:
-    img_name = self.new_input_name_strvar.get()
-    img_url  = self.new_input_param_1_strvar.get()
-    
-    inp = ImageInput(-1, -1, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", img_name)
-    self.scenes[self.current_scene].append(inp)
-    
-    if img_name != "" and img_url != "":
-      img_req  = simpleobsws.Request('CreateInput', { 'sceneName': self.current_scene, 'inputName': img_name, 'inputKind': 'image_source', 'inputSettings': { 'file': img_url }, 'sceneItemEnabled': True })
-      self.connection.queue_request(img_req)
-    
-  def queue_add_text_req(self) -> None:
-    input_name = self.new_input_name_strvar.get()
-    input_text = self.new_input_param_1_strvar.get()
-    input_kind = 'text_gdiplus_v2' if self.platform == "windows" else 'text_ft2_source_v2'
-    
-    inp = TextInput(-1, -1, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name)
-    self.scenes[self.current_scene].append(inp)
-    
-    if input_name != "":
-      img_req  = simpleobsws.Request('CreateInput', { 'sceneName': self.current_scene, 'inputName': input_name, 'inputKind': input_kind, 'inputSettings': { 'text': input_text }, 'sceneItemEnabled': True })
-      self.connection.queue_request(img_req)
-    
-  def queue_add_countdown_req(self) -> None:
-    input_name = self.new_input_name_strvar.get()
-    input_end  = self.new_input_param_1_strvar.get()
-    input_kind = 'text_gdiplus_v2' if self.platform == "windows" else 'text_ft2_source_v2'
-    
-    enddt = dt.datetime.strptime(input_end, TIME_FORMAT)
-    
-    inp = CountdownInput(-1, -1, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name, enddt)
-    self.scenes[self.current_scene].append(inp)
-    
-    if input_name != "":
-      img_req  = simpleobsws.Request('CreateInput', { 'sceneName': self.current_scene, 'inputName': input_name, 'inputKind': input_kind, 'inputSettings': { 'text': "" }, 'sceneItemEnabled': True })
-      self.connection.queue_request(img_req)
-    
-  def queue_add_timer_req(self) -> None:
-    input_name = self.new_input_name_strvar.get()
-    input_kind = 'text_gdiplus_v2' if self.platform == "windows" else 'text_ft2_source_v2'
-    
-    startdt = dt.datetime.now()
-    
-    inp = TimerInput(-1, -1, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name, startdt)
-    self.scenes[self.current_scene].append(inp)
-    
-    if input_name != "":
-      img_req  = simpleobsws.Request('CreateInput', { 'sceneName': self.current_scene, 'inputName': input_name, 'inputKind': input_kind, 'inputSettings': { 'text': "" }, 'sceneItemEnabled': True })
-      self.connection.queue_request(img_req)
-    
-  def queue_add_counter_req(self) -> None:
-    input_name = self.new_input_name_strvar.get()
-    counter_format = self.new_input_param_1_strvar.get()
-    input_kind = 'text_gdiplus_v2' if self.platform == "windows" else 'text_ft2_source_v2'
-    
-    inp = CounterInput(-1, -1, self.canvas, self.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name, counter_format)
-    self.scenes[self.current_scene].append(inp)
-    
-    if input_name != "":
-      img_req  = simpleobsws.Request('CreateInput', { 'sceneName': self.current_scene, 'inputName': input_name, 'inputKind': input_kind, 'inputSettings': { 'text': inp.get_formatted_counter() }, 'sceneItemEnabled': True })
-      self.connection.queue_request(img_req)
+    user_types_map[inputtype].setup_create_ui(self, frame)
   
   def set_conn_ui_state(self, disabled : bool, submit_str : str) -> None:
     self.conn_submit_strvar.set(submit_str)
@@ -909,7 +769,7 @@ class Default_GUI:
       logging.error(resp)
       
   def save_scene_items(self) -> None:
-    d = dict()
+    d : dict[str, list] = dict()
     for scene in self.scenes.keys():
       d[scene] = []
       for item in self.scenes[scene]:
@@ -931,18 +791,14 @@ class Default_GUI:
       for scene in dict(d).keys():
         self.scenes[scene] = []
         for itemdict in d[scene]:
-          if itemdict['type'] == "imageinput":
-            item = ImageInput.from_dict(itemdict, self.canvas, self.screen)
-          elif itemdict['type'] == "textinput":
-            item = TextInput.from_dict(itemdict, self.canvas, self.screen)
-          elif itemdict['type'] == "timerinput":
-            item = TimerInput.from_dict(itemdict, self.canvas, self.screen)
-          elif itemdict['type'] == "countdowninput":
-            item = CountdownInput.from_dict(itemdict, self.canvas, self.screen)
-          elif itemdict['type'] == "counterinput":
-            item = CounterInput.from_dict(itemdict, self.canvas, self.screen)
+          if itemdict['type'] in list(user_types_map.keys()):
+            item = user_types_map[itemdict['type']].from_dict(itemdict, self.canvas, self.screen)
+          elif itemdict['type'] == "obs_object":
+            item = OBS_Object.from_dict(itemdict, self.canvas, self.screen)
           else:
             logging.error("Unrecognized item type in save data. Skipping.")
+            logging.error(f"Type: {itemdict['type']}")
 
           if item:
+            item.remove_from_canvas()
             self.scenes[scene].append(item)

@@ -100,6 +100,10 @@ class OBS_Object:
   
   trans_changed : bool = False
   
+  @staticmethod
+  def description():
+    return "OBS Object"
+  
   def __init__(self, scene_item_id : int, scene_item_index : int, canvas : tk.Canvas, screen, x : float, y : float, width : float, height : float, rotation : float, source_width : float, source_height : float, bounds_type : str, label : str = "", interactable : bool = True):
     self.scene_item_id = scene_item_id
     self.scene_item_index = scene_item_index
@@ -581,33 +585,30 @@ class OBS_Object:
       self.set_source_name(newname, True)
     
   def setup_update_dialog(self, gui : 'Default_GUI') -> None:
-    self.update_image_dialog = tk.Toplevel(gui.root)
+    self.update_input_dialog = tk.Toplevel(gui.root)
     x = gui.root.winfo_x()
     y = gui.root.winfo_y()
-    self.update_image_dialog.geometry(f"+{x + 200}+{y + 200}")
+    self.update_input_dialog.geometry(f"+{x + 200}+{y + 200}")
     
-    self.update_image_dialog.protocol("WM_DELETE_WINDOW", self.update_image_dialog.destroy)
+    self.update_input_dialog.protocol("WM_DELETE_WINDOW", self.update_input_dialog.destroy)
     
-    self.update_image_frame = ttk.Frame(self.update_image_dialog, padding = "12 12 12 12")
-    self.update_image_frame.grid(column = 0, row = 0, sticky = (tk.N, tk.W, tk.E, tk.S))
+    self.update_input_frame = ttk.Frame(self.update_input_dialog, padding = "12 12 12 12")
+    self.update_input_frame.grid(column = 0, row = 0, sticky = (tk.N, tk.W, tk.E, tk.S))
     
-    self.update_image_name_label = ttk.Label(self.update_image_frame, text = f"Update name and settings for \"{self.source_name} ({self.scene_item_id})\"?")
-    self.update_image_name_label.grid(column = 0, columnspan = 2, row = 0, sticky = (tk.W, tk.E))
-    self.update_image_warn_label = ttk.Label(self.update_image_frame, text = f"(this will affect all inputs with the same name)")
-    self.update_image_warn_label.grid(column = 0, columnspan = 2, row = 1, sticky = (tk.W, tk.E))
+    self.update_input_name_label = ttk.Label(self.update_input_frame, text = f"Update name and settings for \"{self.source_name} ({self.scene_item_id})\"?")
+    self.update_input_name_label.grid(column = 0, columnspan = 2, row = 0, sticky = (tk.W, tk.E))
+    self.update_input_warn_label = ttk.Label(self.update_input_frame, text = f"(this will affect all inputs with the same name)")
+    self.update_input_warn_label.grid(column = 0, columnspan = 2, row = 1, sticky = (tk.W, tk.E))
     
     def updatefunc():
       self.update_info()
-      self.update_image_dialog.destroy()
+      self.update_input_dialog.destroy()
       
-    self.update_image_submit = ttk.Button(self.update_image_frame, text = "Yes", command = updatefunc)
-    self.update_image_submit.grid(column = 0, row = 2, sticky = (tk.W, tk.E))
+    self.update_input_submit = ttk.Button(self.update_input_frame, text = "Yes", command = updatefunc)
+    self.update_input_submit.grid(column = 0, row = 2, sticky = (tk.W, tk.E))
   
-    self.update_image_cancel = ttk.Button(self.update_image_frame, text = "No", command = self.update_image_dialog.destroy)
-    self.update_image_cancel.grid(column = 1, row = 2, sticky = (tk.W, tk.E))
-    
-  def setup_create_ui(self, gui : 'Default_GUI') -> None:
-    None
+    self.update_input_cancel = ttk.Button(self.update_input_frame, text = "No", command = self.update_input_dialog.destroy)
+    self.update_input_cancel.grid(column = 1, row = 2, sticky = (tk.W, tk.E))
     
   def to_dict(self) -> dict:
     return {
@@ -625,6 +626,44 @@ class OBS_Object:
       "bounds_type": self.bounds_type,
       "interactable": self.interactable
     }
+    
+  @staticmethod
+  def setup_add_input_name(gui : 'Default_GUI', frame : tk.Frame, row : int = 0) -> int:
+    gui.new_input_name_label = ttk.Label(frame, text = "Input name", style = "Large.TLabel")
+    gui.new_input_name_label.grid(column = 0, row = row, sticky = tk.W)
+    row += 1
+    gui.new_input_name_entry = ttk.Entry(frame, textvariable = gui.new_input_name_strvar, width = 48, **gui.largefontopt)
+    gui.new_input_name_entry.grid(column = 0, row = row, sticky = tk.W, pady = (0, 10))
+    row += 1
+    
+    return row
+  
+  @staticmethod
+  def setup_add_input_buttons(gui : 'Default_GUI', frame : tk.Frame, addcb : Callable, row : int = 0) -> int:
+    gui.add_input_button_frame = ttk.Frame(frame)
+    gui.add_input_button_frame.grid(column = 0, row = row, sticky= tk.E)
+    row += 1
+    
+    def addinput() -> None:
+      addcb()
+      gui.close_add_input_dialog()
+    
+    gui.new_input_submit = ttk.Button(gui.add_input_button_frame, text = "Add", command = addinput, padding = "5 0 0 0", style = "Large.TButton")
+    gui.new_input_submit.grid(column = 0, row = 0, sticky = tk.E, padx = (5, 5))
+    
+    gui.new_input_cancel = ttk.Button(gui.add_input_button_frame, text = "Cancel", command = gui.close_add_input_dialog, style="Large.TButton")
+    gui.new_input_cancel.grid(column = 1, row = 0, sticky = tk.E, padx = (5, 5))
+    
+    return row
+  
+  @staticmethod
+  def setup_create_ui(gui : 'Default_GUI', frame : tk.Frame) -> None:
+    row = 0
+    row = OBS_Object.setup_add_input_name(frame, row)
+  
+  @staticmethod
+  def queue_add_input_request(gui : 'Default_GUI') -> None:
+    None
   
   @staticmethod
   def from_dict(d : dict, canvas : tk.Canvas, screen : 'OBS_Object') -> 'OBS_Object':

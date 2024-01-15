@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
   from ..ui.defaultgui import Default_GUI
+  
+import simpleobsws
 
 from ..util.dtutil import strfdelta
 from .obs_object import OBS_Object
@@ -14,6 +16,10 @@ class CounterInput(TextInput):
   counter = 0
   counter_standin = "__count__"
   counter_format = "__count__"
+  
+  @staticmethod
+  def description():
+    return "Counter"
   
   def __init__(self, scene_item_id : int, scene_item_index : int, canvas : tk.Canvas, screen, x : float, y : float, width : float, height : float, rotation : float, source_width : float, source_height : float, bounds_type : str, label : str = "", counter_format : str = "{}", interactable : bool = True):
     super().__init__(scene_item_id, scene_item_index, canvas, screen, x, y, width, height, rotation, source_width, source_height, bounds_type, label, interactable)
@@ -82,13 +88,41 @@ class CounterInput(TextInput):
   
   def to_dict(self) -> dict:
     d = OBS_Object.to_dict(self)
-    d['type'] = "counterinput"
+    d['type'] = self.description()
     d['format'] = self.counter_format
     d['count'] = self.counter
     d['color'] = self.color
     d['bk_color'] = self.bk_color
     d['bk_enabled'] = self.bk_enabled
     return d
+  
+  @staticmethod
+  def setup_create_ui(gui : 'Default_GUI', frame : tk.Frame) -> None:
+    row = 0
+    row = OBS_Object.setup_add_input_name(gui, frame, row)
+    
+    gui.counter_info_label = ttk.Label(frame, text = "Counter format (__count__ gets replaced):", style = "Large.TLabel")
+    gui.counter_info_label.grid(column = 0, row = row, sticky = tk.W)
+    row += 1
+    gui.string_param_1.set("Current count is __count__.")
+    gui.new_counter_entry = ttk.Entry(frame, textvariable = gui.string_param_1, width = 48, **gui.largefontopt)
+    gui.new_counter_entry.grid(column = 0, row = row, sticky = tk.W, pady = (0, 10))
+    row += 1
+    
+    row = OBS_Object.setup_add_input_buttons(gui, frame, lambda: CounterInput.queue_add_input_request(gui), row)
+  
+  @staticmethod
+  def queue_add_input_request(gui : 'Default_GUI') -> None:
+    input_name = gui.new_input_name_strvar.get()
+    counter_format = gui.string_param_1.get()
+    input_kind = 'text_gdiplus_v2' if gui.platform == "windows" else 'text_ft2_source_v2'
+    
+    inp = CounterInput(-1, -1, gui.canvas, gui.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name, counter_format)
+    gui.scenes[gui.current_scene].append(inp)
+    
+    if input_name != "":
+      img_req  = simpleobsws.Request('CreateInput', { 'sceneName': gui.current_scene, 'inputName': input_name, 'inputKind': input_kind, 'inputSettings': { 'text': inp.get_formatted_counter() }, 'sceneItemEnabled': True })
+      gui.connection.queue_request(img_req)
   
   @staticmethod
   def from_dict(d : dict, canvas : tk.Canvas, screen : OBS_Object) -> 'CounterInput':

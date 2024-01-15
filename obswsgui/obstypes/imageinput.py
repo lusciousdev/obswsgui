@@ -22,6 +22,10 @@ class ImageInput(OBS_Object):
   transformed_img = None
   tk_img = None
   
+  @staticmethod
+  def description():
+    return "Image"
+  
   def __init__(self, scene_item_id : int, scene_item_index : int, canvas : tk.Canvas, screen, x : float, y : float, width : float, height : float, rotation : float, source_width : float, source_height : float, bounds_type : str, label : str = "", interactable : bool = True):
     super().__init__(scene_item_id, scene_item_index, canvas, screen, x, y, width, height, rotation, source_width, source_height, bounds_type, label, interactable)
     self.url_strvar = tk.StringVar(self.canvas, self.img_url)
@@ -147,9 +151,36 @@ class ImageInput(OBS_Object):
   
   def to_dict(self) -> dict:
     d = super().to_dict()
-    d['type'] = "imageinput"
+    d['type'] = self.description()
     d['url'] = self.img_url
     return d
+  
+  @staticmethod
+  def setup_create_ui(gui : 'Default_GUI', frame : tk.Frame) -> None:
+    row = 0
+    row = OBS_Object.setup_add_input_name(gui, frame, row)
+    
+    gui.new_image_url_label = ttk.Label(frame, text = "Image URL (must be online)", style = "Large.TLabel")
+    gui.new_image_url_label.grid(column = 0, row = row, sticky = tk.W)
+    row += 1
+    gui.string_param_1.set("")
+    gui.new_image_url_entry = ttk.Entry(frame, textvariable = gui.string_param_1, width = 48, **gui.largefontopt)
+    gui.new_image_url_entry.grid(column = 0, row = row, sticky = tk.W, pady = (0, 10))
+    row += 1
+    
+    row = OBS_Object.setup_add_input_buttons(gui, frame, lambda: ImageInput.queue_add_input_request(gui), row)
+    
+  @staticmethod
+  def queue_add_input_request(gui : 'Default_GUI') -> None:
+    img_name = gui.new_input_name_strvar.get()
+    img_url  = gui.string_param_1.get()
+    
+    inp = ImageInput(-1, -1, gui.canvas, gui.screen, 0, 0, 0, 0, 0, 0, 0, "", img_name)
+    gui.scenes[gui.current_scene].append(inp)
+    
+    if img_name != "" and img_url != "":
+      img_req  = simpleobsws.Request('CreateInput', { 'sceneName': gui.current_scene, 'inputName': img_name, 'inputKind': 'image_source', 'inputSettings': { 'file': img_url }, 'sceneItemEnabled': True })
+      gui.connection.queue_request(img_req)
   
   @staticmethod
   def from_dict(d : dict, canvas : tk.Canvas, screen : OBS_Object) -> 'ImageInput':

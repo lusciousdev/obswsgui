@@ -23,10 +23,14 @@ from .countdowninput import (
   TIME_FORMAT
 )
 
-from .timerinput import (
-  TimerInput
+from .stopwatchinput import (
+  StopwatchInput
 )
 
 from .counterinput import (
   CounterInput
+)
+
+from .timerinput import (
+  TimerInput
 )

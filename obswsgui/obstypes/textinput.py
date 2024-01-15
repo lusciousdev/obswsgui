@@ -30,6 +30,10 @@ class TextInput(OBS_Object):
   
   text_strvar = None
   
+  @staticmethod
+  def description():
+    return "Text"
+  
   def __init__(self, scene_item_id : int, scene_item_index : int, canvas : tk.Canvas, screen, x : float, y : float, width : float, height : float, rotation : float, source_width : float, source_height : float, bounds_type : str, label : str = "", interactable : bool = True):
     self.text_font = font.Font(family="Helvetica", size = 1)
     super().__init__(scene_item_id, scene_item_index, canvas, screen, x, y, width, height, rotation, source_width, source_height, bounds_type, label, interactable)
@@ -223,12 +227,40 @@ class TextInput(OBS_Object):
   
   def to_dict(self) -> dict:
     d = super().to_dict()
-    d['type'] = "textinput"
+    d['type'] = self.description()
     d['text'] = self.text
     d['color'] = self.color
     d['bk_color'] = self.bk_color
     d['bk_enabled'] = self.bk_enabled
     return d
+  
+  @staticmethod
+  def setup_create_ui(gui : 'Default_GUI', frame : tk.Frame) -> None:
+    row = 0
+    row = OBS_Object.setup_add_input_name(gui, frame, row)
+    
+    gui.new_text_text_label = ttk.Label(frame, text = "Text", style = "Large.TLabel")
+    gui.new_text_text_label.grid(column = 0, row = row, sticky = tk.W)
+    row += 1
+    gui.string_param_1.set("")
+    gui.new_text_text_entry = ttk.Entry(frame, textvariable = gui.string_param_1, width = 48, **gui.largefontopt)
+    gui.new_text_text_entry.grid(column = 0, row = row, sticky = tk.W, pady = (0, 10))
+    row += 1    
+    
+    row = OBS_Object.setup_add_input_buttons(gui, frame, lambda: TextInput.queue_add_input_request(gui), row)
+  
+  @staticmethod
+  def queue_add_input_request(gui : 'Default_GUI') -> None:
+    input_name = gui.new_input_name_strvar.get()
+    input_text = gui.string_param_1.get()
+    input_kind = 'text_gdiplus_v2' if gui.platform == "windows" else 'text_ft2_source_v2'
+    
+    inp = TextInput(-1, -1, gui.canvas, gui.screen, 0, 0, 0, 0, 0, 0, 0, "", input_name)
+    gui.scenes[gui.current_scene].append(inp)
+    
+    if input_name != "":
+      img_req  = simpleobsws.Request('CreateInput', { 'sceneName': gui.current_scene, 'inputName': input_name, 'inputKind': input_kind, 'inputSettings': { 'text': input_text }, 'sceneItemEnabled': True })
+      gui.connection.queue_request(img_req)
   
   @staticmethod
   def from_dict(d : dict, canvas : tk.Canvas, screen : OBS_Object) -> 'TextInput':

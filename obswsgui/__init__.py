@@ -26,7 +26,7 @@ from .networking.proxiedserverconn import (
 
 from .obstypes.textinput import TextInput
 from .obstypes.countdowninput import CountdownInput, TIME_FORMAT
-from .obstypes.timerinput import TimerInput
+from .obstypes.stopwatchinput import StopwatchInput
 
 from .obstypes.obs_object import (
   InputKind,
