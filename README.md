@@ -20,6 +20,8 @@ Input the IP address, port, and password for the OBS WebSocket server you wish t
 
 If you wish to hide your IP address from the people connecting to your OBS WebSocket server, use the proxiedserver and proxiedclient executables in the release. You can run your own proxy backend using [obswsgui/backend.py](obswsgui/backend.py).
 
+The room code serves as a password for that session. One is generated upon launching the proxyserver, it can be shared with desired clients to allow them to connect. If the room code is leaked, close the proxyserver to prevent unintended users from accessing the WebSocket server.
+
 ### Adding images
 
 All image URLs must be accessible by the OBS client you are interfacing with. If you want to add an image that you have locally your best bet is uploading to a site like imgur and copying the URL.
