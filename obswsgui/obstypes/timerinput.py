@@ -11,10 +11,10 @@ import simpleobsws
 from ..util.dtutil import TIME_FORMAT, strfdelta
 from ..util.miscutil import hms_to_ms, ms_to_hms
 from .obs_object import OBS_Object
-from .countdowninput import CountdownInput
+from .stopwatchinput import StopwatchInput
 from .textinput import TextInput
 
-class TimerInput(CountdownInput):
+class TimerInput(StopwatchInput):
   total_time : float = 0 # in ms
   time_left_ms : float = 0 # in ms
   last_update : dt.datetime = None
@@ -36,7 +36,11 @@ class TimerInput(CountdownInput):
   
   def calc_time(self):
     if self.time_left_ms == 0:
-      return 
+      return
+    if self.paused:
+      self.last_update = dt.datetime.now()
+      self.set_text(strfdelta(dt.timedelta(milliseconds = self.time_left_ms), self.text_format))
+      return
     
     time_passed = dt.datetime.now() - self.last_update
     
@@ -46,6 +50,12 @@ class TimerInput(CountdownInput):
     self.set_text(strfdelta(dt.timedelta(milliseconds = self.time_left_ms), self.text_format))
     
     self.last_update = dt.datetime.now()
+    
+  def reset_timer(self):
+    self.time_left_ms = self.total_time
+    self.last_update = dt.datetime.now()
+    
+    self.set_text(strfdelta(dt.timedelta(milliseconds = self.time_left_ms), self.text_format))
       
   def update_info(self) -> None:
     newhours   = int(self.hours_strvar.get())
@@ -59,6 +69,7 @@ class TimerInput(CountdownInput):
     if diff != 0:
       self.total_time = newtotal
       self.time_left_ms += diff
+      self.time_left_ms = max(0, self.time_left_ms)
       self.calc_time()
       
     OBS_Object.update_info(self)
@@ -101,6 +112,7 @@ class TimerInput(CountdownInput):
     row = 0
     row = self.setup_modify_name(gui, gui.modifyframe, row)
     row = self.setup_modify_duration(gui, gui.modifyframe, row)
+    row = self.setup_timer_buttons(gui, gui.modifyframe, row)
     row = self.setup_update_button(gui, gui.modifyframe, row)
     row = self.setup_color_picker(gui, gui.modifyframe, "Color: ", lambda s: self.queue_set_input_color(gui, s), row)
     row = self.setup_color_picker(gui, gui.modifyframe, "Background: ", lambda s: self.queue_set_input_background(gui, s), row)
@@ -162,7 +174,7 @@ class TimerInput(CountdownInput):
       gui.connection.queue_request(img_req)
   
   @staticmethod
-  def from_dict(d : dict, canvas : tk.Canvas, screen : OBS_Object) -> 'CountdownInput':
+  def from_dict(d : dict, canvas : tk.Canvas, screen : OBS_Object) -> 'TimerInput':
     h, m, s, _ = ms_to_hms(d['total_time'])
     cdin = TimerInput(d['scene_item_id'], d['scene_item_index'], canvas, screen, d['x'], d['y'], d['width'], d['height'], d['rotation'], d['source_width'], d['source_height'], d['bounds_type'], d['source_name'], h, m, s, d['time_left_ms'], d['interactable'])
     cdin.set_color(d['color'], False)
