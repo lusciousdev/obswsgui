@@ -8,11 +8,17 @@ Check the [GitHub releases](https://github.com/lusciousdev/obswsgui/releases).
 
 ## Using obswsgui
 
-### Connecting to a WebSocket server
+### Connecting directly to a WebSocket server
 
-Input the IP address, port, and password for the OBS WebSocket server you wish to connect to.
+Download the obswsgui zip in the releases and run the exe contained within.
+
+Input the IP address, port, and password for the OBS WebSocket server you wish to connect to. The person you are connecting to must have forwarded the port used for their WebSocket server in order for you to connect.
 
 <img src="./.github/images/connection_screen.png" width=450 align="center">
+
+### Using a proxy server to connect to a WebSocket server
+
+If you wish to hide your IP address from the people connecting to your OBS WebSocket server, use the proxiedserver and proxiedclient executables in the release. You can run your own proxy backend using [obswsgui/backend.py](obswsgui/backend.py).
 
 ### Adding images
 
@@ -26,13 +32,13 @@ There's a dropdown in the add dialog, select the type of source you need. There 
 
 Countdown sources are a timer that decrements to whatever date/time you set in the dialog. Max countdown timer is 24 hours, the default is 1 hour. The end time must be given in the format "YYYY-MM-DD HH:mm:ss" (24 hour time).
 
-If you close the OBS WS GUI and reopen all countdown sources will be reverted to plain text sources. You will have to recreate the countdown source t o get it back working.
+#### Stopwatches
+
+Stopwatch sources count up . They can be paused or reset in the side panel when selected. 
 
 #### Timers
 
-Timer sources count up from the moment they are made. They can be paused or reset in the side panel when selected. 
-
-If you close the OBS WS GUI and reopen all timer sources will be reverted to plain text sources. You will have to recreate the countdown source t o get it back working.
+Timer sources count down from a starting duration. They can be paused or reset in the side panel when selected.
 
 ### Manipulating sources
 
@@ -48,4 +54,6 @@ To reorder images you can hit move to the front when selecting one of the moveab
 
 ## Running from source
 
-Just run ./src/main.py, you'll need to install PIL and simpleobsws
+Just run [obswsgui/\_\_main\_\_.py](obswsgui/__main__.py)
+
+You'll need to install PIL and simpleobsws
